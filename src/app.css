@@ -1,0 +1,191 @@
+/* ML3K v2 — Design Tokens */
+:root {
+	--ac: #CF5D5D;
+	--as: #FDF0F0;
+	--ab: #E8A5A5;
+	--gn: #12804A;
+	--gs: #E6F5ED;
+	--or: #C4550A;
+	--os: #FEF3EB;
+	--rd: #C62A2F;
+	--rs: #FDEBED;
+	--pu: #6E3FF3;
+	--ps: #F0EBFE;
+	--tp: #111318;
+	--ts: #60646C;
+	--tt: #9CA0AA;
+	--sf: #FFF;
+	--bg: #F4F5F7;
+	--bd: #E2E4E9;
+	--r: 10px;
+	--fd: 'DM Sans', sans-serif;
+	--fm: 'IBM Plex Mono', monospace;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+	font-family: var(--fd);
+	background: var(--bg);
+	color: var(--tp);
+	-webkit-font-smoothing: antialiased;
+}
+
+/* Module shell */
+.app-shell {
+	display: flex;
+	flex-direction: column;
+	height: 100vh;
+	overflow: hidden;
+}
+
+.app-header {
+	background: var(--sf);
+	border-bottom: 1px solid var(--bd);
+	padding: 10px 20px;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	box-shadow: 0 1px 2px rgba(0,0,0,.04);
+	z-index: 50;
+}
+
+.app-body {
+	flex: 1;
+	overflow-y: auto;
+	padding: 20px;
+}
+
+/* Module switcher */
+.mod-sw {
+	display: flex;
+	gap: 2px;
+	background: var(--bg);
+	border-radius: 8px;
+	padding: 2px;
+	flex-shrink: 0;
+}
+.mod-btn {
+	padding: 5px 14px;
+	border-radius: 6px;
+	border: none;
+	font-size: 11px;
+	font-weight: 600;
+	cursor: pointer;
+	font-family: var(--fd);
+	color: var(--ts);
+	background: transparent;
+	transition: all .15s;
+	white-space: nowrap;
+	min-width: 88px;
+	text-align: center;
+}
+.mod-btn.active {
+	background: var(--sf);
+	color: var(--ac);
+	box-shadow: 0 1px 3px rgba(0,0,0,.08);
+}
+
+/* Buttons */
+.rbtn {
+	padding: 5px 12px;
+	font-size: 11px;
+	border-radius: 6px;
+	border: 1px solid var(--bd);
+	background: var(--sf);
+	color: var(--tp);
+	font-family: var(--fd);
+	font-weight: 600;
+	cursor: pointer;
+	transition: all .15s;
+	white-space: nowrap;
+}
+.rbtn:hover { border-color: var(--ac); }
+
+.mbtn {
+	padding: 9px 22px;
+	font-size: 12px;
+	font-weight: 700;
+	border-radius: 8px;
+	border: 1px solid var(--bd);
+	background: var(--sf);
+	color: var(--tp);
+	font-family: var(--fd);
+	cursor: pointer;
+	transition: all .15s;
+}
+.mbtn-primary { background: var(--ac); color: #fff; border-color: var(--ac); }
+.mbtn-danger { background: var(--rd); color: #fff; border-color: var(--rd); }
+
+/* Status badge */
+.sb-status {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	font-size: 10px;
+	font-weight: 600;
+	padding: 2px 8px;
+	border-radius: 4px;
+}
+.sb-status.connected { background: var(--gs); color: var(--gn); }
+.sb-status.checking { background: var(--bg); color: var(--tt); }
+
+/* Data table */
+.dtb {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 11px;
+}
+.dtb th {
+	text-align: left;
+	font-size: 10px;
+	font-weight: 600;
+	color: var(--ts);
+	padding: 8px 10px;
+	border-bottom: 2px solid var(--bd);
+	white-space: nowrap;
+}
+.dtb td {
+	padding: 6px 10px;
+	border-bottom: 1px solid var(--bd);
+	vertical-align: middle;
+}
+.dtb tr:hover { background: var(--bg); }
+.mono { font-family: var(--fm); }
+.fw7 { font-weight: 700; }
+
+/* Cards */
+.card {
+	background: var(--sf);
+	border: 1px solid var(--bd);
+	border-radius: var(--r);
+	padding: 16px;
+	margin-bottom: 14px;
+}
+
+/* Bottom bar */
+.bottom-bar {
+	position: fixed;
+	bottom: 0;
+	left: 0;
+	right: 0;
+	z-index: 65;
+	background: var(--sf);
+	border-top: 1px solid var(--bd);
+	box-shadow: 0 -2px 8px rgba(0,0,0,.06);
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 5px 16px;
+	height: 44px;
+}
+
+/* Spinner */
+.spn {
+	width: 40px; height: 40px;
+	border: 3px solid var(--bd);
+	border-top-color: var(--ac);
+	border-radius: 50%;
+	animation: sp .8s linear infinite;
+}
+@keyframes sp { to { transform: rotate(360deg); } }
