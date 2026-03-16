@@ -4,7 +4,7 @@
 	import { supabase } from '$lib/supabase';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { HelpDialog } from '$lib/components';
+	import { HelpDialog, Toast } from '$lib/components';
 	import { exportBackup, importBackup } from '$lib/backup';
 	import { restoreUndo, hasUndo } from '$lib/undo';
 	import { startRealtime, stopRealtime } from '$lib/realtime';
@@ -62,6 +62,17 @@
 		} catch {}
 	});
 
+	// Keyboard shortcuts
+	function handleKeydown(e: KeyboardEvent) {
+		if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey && $role === 'admin') {
+			e.preventDefault();
+			doUndo();
+		}
+		if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+			e.preventDefault(); // Prevent browser save dialog
+		}
+	}
+
 	function switchModule(mod: 'v26' | 'lp' | 'lm') {
 		$activeModule = mod;
 		if (mod === 'lp') goto('/lp');
@@ -72,8 +83,10 @@
 </script>
 
 <svelte:head>
-	<title>ML3K v2</title>
+	<title>ML3K v2{$role ? ` · ${$activeModule === 'lp' ? 'Load Plan' : $activeModule === 'lm' ? 'Last Mile' : 'Vision 2026'}` : ''}</title>
+	<meta name="description" content="FIFA World Cup 2026 Ground Transport Logistics Manager">
 </svelte:head>
+<svelte:window onkeydown={handleKeydown} />
 
 {#if $role}
 	<div class="app-shell">
@@ -81,7 +94,7 @@
 			<div style="display:flex;align-items:center;gap:12px">
 				<div>
 					<div style="font-size:14px;font-weight:700">
-						ML3K <span style="color:var(--ac);font-size:10px">v2</span> <span style="font-size:8px;color:var(--tt);font-weight:400">b0316y</span>
+						ML3K <span style="color:var(--ac);font-size:10px">v2</span> <span style="font-size:8px;color:var(--tt);font-weight:400">b0316z</span>
 						<button onclick={async () => { await signOut(); $role = ''; window.location.href = '/'; }}
 							style="font-size:10px;padding:2px 6px;border-radius:4px;margin-left:4px;border:none;cursor:pointer;{$role === 'admin' ? 'background:var(--as);color:var(--ac)' : 'background:var(--bg);color:var(--ts)'}"
 							title="Click to sign out">
@@ -123,3 +136,4 @@
 {:else}
 	{@render children()}
 {/if}
+<Toast />

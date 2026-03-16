@@ -189,3 +189,40 @@ body {
 	animation: sp .8s linear infinite;
 }
 @keyframes sp { to { transform: rotate(360deg); } }
+
+/* ── Mobile Responsive ── */
+@media (max-width: 768px) {
+	.app-header { padding: 8px 12px; flex-wrap: wrap; gap: 6px; }
+	.mod-sw { margin-right: 0; }
+	.mod-btn { padding: 4px 8px; font-size: 9px; min-width: 60px; }
+	.rbtn { padding: 4px 8px; font-size: 10px; }
+	.app-body { padding: 10px; }
+	.dtb { font-size: 10px; }
+	.dtb th { padding: 5px 6px; font-size: 9px; }
+	.dtb td { padding: 4px 6px; }
+	.card { padding: 12px; }
+	.bottom-bar { padding: 4px 10px; gap: 4px; }
+}
+
+@media (max-width: 480px) {
+	.app-header { padding: 6px 8px; }
+	.mod-btn { padding: 3px 6px; font-size: 8px; min-width: 50px; }
+	.rbtn { padding: 3px 6px; font-size: 9px; }
+}
+
+/* ── Focus states for accessibility ── */
+input:focus, select:focus, button:focus-visible {
+	outline: 2px solid var(--ac);
+	outline-offset: 1px;
+}
+
+/* ── Smooth transitions ── */
+.rbtn, .mbtn, .mod-btn { transition: all .15s; }
+.rbtn:hover { border-color: var(--ac); }
+.card { transition: box-shadow .15s; }
+
+/* ── Print styles ── */
+@media print {
+	.app-header, .bottom-bar, .mod-sw { display: none !important; }
+	.app-body { padding: 0; overflow: visible; }
+}

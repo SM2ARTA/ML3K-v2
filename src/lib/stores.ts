@@ -1,11 +1,21 @@
 import { writable } from 'svelte/store';
+import { browser } from '$app/environment';
 
-// Auth
-export const role = writable<'admin' | 'viewer' | ''>('');
+// Auth — persists to localStorage
+function createPersistentStore<T>(key: string, initial: T) {
+	const stored = browser ? localStorage.getItem(key) : null;
+	const store = writable<T>(stored ? JSON.parse(stored) : initial);
+	if (browser) {
+		store.subscribe(value => localStorage.setItem(key, JSON.stringify(value)));
+	}
+	return store;
+}
+
+export const role = createPersistentStore<'admin' | 'viewer' | ''>('ml3k-role', '');
 export const connected = writable(false);
 
-// Active module
-export const activeModule = writable<'v26' | 'lp' | 'lm'>('lm');
+// Active module — persists
+export const activeModule = createPersistentStore<'v26' | 'lp' | 'lm'>('ml3k-module', 'lm');
 
 // LP State
 export const lpState = writable({
