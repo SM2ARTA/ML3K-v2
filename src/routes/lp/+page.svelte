@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { getLPDemand, getLPHolds, updateCustomsOverride, toggleHSConfirm } from '$lib/db';
+	import { getLPDemand, getLPHolds, getLPTruckSummary, getLPPlan, getLPDestinations, getLPTruckDispatch, getLPArrivals, updateCustomsOverride, toggleHSConfirm } from '$lib/db';
 	import { role } from '$lib/stores';
-	import { TabBar, StatBadge, Spinner, SearchInput, FilterDropdown, DestBadge, EditableCell, ConfirmButton } from '$lib/components';
+	import { TabBar, StatBadge, Spinner, SearchInput, FilterDropdown, DestBadge, EditableCell, ConfirmButton, TruckCard } from '$lib/components';
 	import { createSvelteTable, type ColumnDef, type SortingState } from '$lib/table.svelte';
 	import { getCoreRowModel, getSortedRowModel, getFilteredRowModel } from '@tanstack/table-core';
 
@@ -15,6 +15,10 @@
 
 	let rawDemand = $state<any[]>([]);
 	let holds = $state<any[]>([]);
+	let planRows = $state<any[]>([]);
+	let truckDispatch = $state<any[]>([]);
+	let destinations = $state<any[]>([]);
+	let arrivals = $state<any[]>([]);
 	let loading = $state(true);
 	let activeTab = $state('demand');
 	let globalFilter = $state('');
@@ -30,6 +34,47 @@
 	];
 
 	let holdSet = $derived(new Set(holds.map(h => `${h.destination}|${h.sku}`)));
+
+	// Aggregate plan rows into trucks for Plan tab
+	let trucks = $derived.by(() => {
+		const map = new Map<number, any>();
+		for (const r of planRows) {
+			if (!map.has(r.truck_id)) {
+				const disp = truckDispatch.find(d => d.truck_id === r.truck_id);
+				const dest = destinations.find(d => r.destination?.includes(d.name));
+				map.set(r.truck_id, {
+					id: r.truck_id, date: r.dispatch_date || '', destination: r.destination || '',
+					totalQty: 0, totalPallets: 0, skuCount: 0,
+					dispatched: disp?.dispatched || false, lsrNumber: disp?.lsr_number || '',
+					transitDays: dest?.transit_days || 0, skus: new Set<string>()
+				});
+			}
+			const t = map.get(r.truck_id)!;
+			t.totalQty += r.qty || 0;
+			t.totalPallets += r.pallets || 0;
+			t.skus.add(r.sku);
+		}
+		// Finalize SKU counts
+		for (const t of map.values()) { t.skuCount = t.skus.size; delete t.skus; }
+		return [...map.values()].sort((a, b) => {
+			if (a.date !== b.date) return a.date.localeCompare(b.date);
+			return a.id - b.id;
+		});
+	});
+
+	// Group trucks by date for display
+	let trucksByDate = $derived.by(() => {
+		const groups: { date: string; trucks: any[] }[] = [];
+		let currentDate = '';
+		for (const t of trucks) {
+			if (t.date !== currentDate) {
+				currentDate = t.date;
+				groups.push({ date: currentDate, trucks: [] });
+			}
+			groups[groups.length - 1].trucks.push(t);
+		}
+		return groups;
+	});
 
 	// Handle both RPC format (aggregated) and view format (individual rows)
 	let data = $derived.by<DemandRow[]>(() => {
@@ -94,8 +139,11 @@
 
 	onMount(async () => {
 		loading = true;
-		const [d, h] = await Promise.all([getLPDemand(), getLPHolds()]);
-		rawDemand = d; holds = h; loading = false;
+		const [d, h, p, td, dest, arr] = await Promise.all([
+			getLPDemand(), getLPHolds(), getLPPlan(), getLPTruckDispatch(), getLPDestinations(), getLPArrivals()
+		]);
+		rawDemand = d; holds = h; planRows = p; truckDispatch = td; destinations = dest; arrivals = arr;
+		loading = false;
 	});
 
 	const isAdmin = $derived($role === 'admin');
@@ -185,11 +233,80 @@
 			</tbody>
 		</table>
 	</div>
+{:else if activeTab === 'plan'}
+	<!-- Plan Tab — Truck Cards -->
+	<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+		<StatBadge label="{trucks.length} trucks · {trucks.reduce((s,t) => s + t.totalQty, 0).toLocaleString()} pcs · {trucks.reduce((s,t) => s + t.totalPallets, 0).toFixed(1)} plt" />
+		<StatBadge label="🔒 {trucks.filter(t => t.dispatched).length} locked" variant="green" />
+	</div>
+
+	{#if trucks.length === 0}
+		<div class="card" style="text-align:center;padding:40px">
+			<div style="font-size:32px;margin-bottom:12px">🚛</div>
+			<div style="font-size:14px;font-weight:700;margin-bottom:6px">No Plan Generated</div>
+			<div style="font-size:12px;color:var(--ts)">Upload files and generate a plan to see truck assignments.</div>
+		</div>
+	{:else}
+		{#each trucksByDate as group}
+			<div style="margin-bottom:16px">
+				<div style="font-size:12px;font-weight:700;color:var(--ts);margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid var(--bd)">
+					📅 {group.date || 'No date'} — {group.trucks.length} truck{group.trucks.length > 1 ? 's' : ''}
+				</div>
+				<div style="display:flex;flex-wrap:wrap;gap:12px">
+					{#each group.trucks as t (t.id)}
+						<TruckCard
+							truckId={t.id}
+							date={t.date}
+							destination={t.destination}
+							totalQty={t.totalQty}
+							totalPallets={t.totalPallets}
+							skuCount={t.skuCount}
+							dispatched={t.dispatched}
+							lsrNumber={t.lsrNumber}
+							transitDays={t.transitDays}
+							{isAdmin}
+						/>
+					{/each}
+				</div>
+			</div>
+		{/each}
+	{/if}
+
+{:else if activeTab === 'arrivals'}
+	<!-- Arrivals Tab -->
+	<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+		<StatBadge label="{arrivals.length} arrival items" />
+		<StatBadge label="{arrivals.filter(a => a.is_manual).length} manual" variant="purple" />
+	</div>
+
+	<div style="overflow-x:auto;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);max-height:calc(100vh - 200px);overflow-y:auto">
+		<table class="dtb">
+			<thead style="position:sticky;top:0;background:var(--sf);z-index:10">
+				<tr>
+					<th>SKU</th><th>Name</th><th>Container</th><th>Qty</th>
+					<th>Arrival Date</th><th>Ready Date</th><th>Pallets</th><th>Manual</th>
+				</tr>
+			</thead>
+			<tbody>
+				{#each arrivals as a}
+					<tr>
+						<td class="mono" style="font-weight:600">{a.sku}</td>
+						<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{a.name || '—'}</td>
+						<td class="mono" style="font-size:10px">{a.container || '—'}</td>
+						<td class="mono fw7">{(a.qty || 0).toLocaleString()}</td>
+						<td class="mono">{a.arrival_date || '—'}</td>
+						<td class="mono">{a.ready_date || '—'}</td>
+						<td class="mono">{a.avail_pallets ? a.avail_pallets.toFixed(1) : '—'}</td>
+						<td>{a.is_manual ? '✏️' : ''}</td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
+	</div>
+
 {:else}
 	<div class="card" style="text-align:center;padding:40px">
-		<div style="font-size:14px;font-weight:700;margin-bottom:8px">
-			{activeTab === 'plan' ? '🚛 Plan' : activeTab === 'arrivals' ? '📥 Arrivals' : '⚠ Late'}
-		</div>
-		<div style="font-size:12px;color:var(--ts)">Coming soon</div>
+		<div style="font-size:14px;font-weight:700;margin-bottom:8px">⚠ Late Analysis</div>
+		<div style="font-size:12px;color:var(--ts)">Coming soon — requires LM dispatch dates for comparison</div>
 	</div>
 {/if}

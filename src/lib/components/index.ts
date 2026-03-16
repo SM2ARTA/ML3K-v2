@@ -9,3 +9,4 @@ export { default as ProgressBar } from './ProgressBar.svelte';
 export { default as EditableCell } from './EditableCell.svelte';
 export { default as ConfirmButton } from './ConfirmButton.svelte';
 export { default as FilterDropdown } from './FilterDropdown.svelte';
+export { default as TruckCard } from './TruckCard.svelte';
