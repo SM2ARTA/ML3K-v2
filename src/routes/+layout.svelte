@@ -10,9 +10,13 @@
 	import { startRealtime, stopRealtime } from '$lib/realtime';
 	import { loadAIConfig } from '$lib/hs-utils';
 	import { signOut } from '$lib/auth';
+	import { doSystemReset, doResetLP, doSoftResetLP, doResetLM, doSoftResetLM } from '$lib/reset';
+	import { Modal } from '$lib/components';
 
 	let { children } = $props();
 	let helpOpen = $state(false);
+	let resetOpen = $state(false);
+	let resetBusy = $state(false);
 	let backupStatus = $state('');
 	let undoAvailable = $state(false);
 	let realtimeActive = $state(false);
@@ -73,6 +77,14 @@
 		}
 	}
 
+	async function execReset(fn: () => Promise<void>) {
+		resetBusy = true;
+		try { await fn(); } catch (e: any) { alert('Reset failed: ' + e.message); }
+		resetBusy = false;
+		resetOpen = false;
+		window.location.reload();
+	}
+
 	function switchModule(mod: 'v26' | 'lp' | 'lm') {
 		$activeModule = mod;
 		if (mod === 'lp') goto('/lp');
@@ -123,9 +135,42 @@
 				<button class="rbtn" onclick={doUndo} disabled={!undoAvailable}
 					style="font-size:10px;padding:4px 8px;opacity:{undoAvailable ? 1 : 0.3}" title="Undo last action">↩ Undo</button>
 				<button class="rbtn" onclick={() => helpOpen = true} style="font-size:10px;padding:4px 8px">? Help</button>
+				{#if $role === 'admin'}
+					<button class="rbtn" onclick={() => resetOpen = true} style="font-size:10px;padding:4px 8px;background:var(--rs);color:var(--rd);border-color:#F5B8BA">↻ Reset</button>
+				{/if}
 			</div>
 		</header>
 		<HelpDialog bind:open={helpOpen} />
+		<Modal title="↻ Reset Data" bind:open={resetOpen}>
+			<div style="font-size:12px">
+				{#if resetBusy}
+					<div style="text-align:center;padding:20px">
+						<div class="spn" style="width:24px;height:24px;margin:0 auto 8px"></div>
+						<div style="color:var(--ts)">Resetting...</div>
+					</div>
+				{:else}
+					<div style="margin-bottom:16px">
+						<div style="font-weight:700;margin-bottom:6px">Load Plan</div>
+						<div style="display:flex;gap:8px">
+							<button class="mbtn" style="background:var(--as);color:var(--ac);border-color:var(--ab)" onclick={() => execReset(doSoftResetLP)}>📂 Soft Reset<br><span style="font-size:9px;font-weight:400">Re-upload files, keep overrides</span></button>
+							<button class="mbtn mbtn-danger" onclick={() => { if(confirm('Erase ALL Load Plan data?')) execReset(doResetLP) }}>🗑 Hard Reset<br><span style="font-size:9px;font-weight:400">Erase everything</span></button>
+						</div>
+					</div>
+					<div style="margin-bottom:16px">
+						<div style="font-weight:700;margin-bottom:6px">Last Mile</div>
+						<div style="display:flex;gap:8px">
+							<button class="mbtn" style="background:var(--as);color:var(--ac);border-color:var(--ab)" onclick={() => execReset(doSoftResetLM)}>📂 Soft Reset<br><span style="font-size:9px;font-weight:400">Re-upload files, keep overrides</span></button>
+							<button class="mbtn mbtn-danger" onclick={() => { if(confirm('Erase ALL Last Mile data?')) execReset(doResetLM) }}>🗑 Hard Reset<br><span style="font-size:9px;font-weight:400">Erase everything</span></button>
+						</div>
+					</div>
+					<div style="border-top:1px solid var(--bd);padding-top:12px">
+						<div style="font-weight:700;margin-bottom:6px;color:var(--rd)">System Reset</div>
+						<button class="mbtn mbtn-danger mbtn-wide" onclick={() => { if(confirm('⚠ This erases ALL data for ALL modules. This cannot be undone. Continue?')) execReset(doSystemReset) }}>⚠ Reset Everything</button>
+						<div style="font-size:9px;color:var(--tt);margin-top:4px">Erases all LP, LM, V26, stock data and returns to fresh state.</div>
+					</div>
+				{/if}
+			</div>
+		</Modal>
 		{#if backupStatus}
 			<div style="padding:4px 16px;background:var(--os);font-size:10px;color:var(--or);text-align:center">{backupStatus}</div>
 		{/if}

@@ -5,6 +5,7 @@
 	import { supabase } from '$lib/supabase';
 	import { TabBar, StatBadge, Spinner, SearchInput, FilterDropdown, DestBadge, EditableCell, ConfirmButton, TruckCard, HoldBar, BottomBar, TruckModal, HSLookup, CombinedCIModal, NomUpdateModal } from '$lib/components';
 	import { fmtDate } from '$lib/utils';
+	import { captureUndo } from '$lib/undo';
 	import { exportLPPlan, exportLPDemand, exportLPArrivals } from '$lib/exports';
 	import { buildLoadPlan } from '$lib/lp-engine';
 	import { createSvelteTable, type ColumnDef, type SortingState } from '$lib/table.svelte';
@@ -44,6 +45,7 @@
 	let sorting = $state<SortingState>([]);
 	let selectedSources = $state(new Set<string>());
 	let selectedDests = $state(new Set<string>());
+	let lateExclDests = $state(new Set<string>());
 
 	const lpTabs = [
 		{ id: 'demand', label: '📋 Demand' },
@@ -179,6 +181,7 @@
 
 	async function handleHold(src: string, dest: string | null, release: boolean) {
 		if (!isAdmin) return;
+		await captureUndo();
 		if (!rawDemandForHolds.length) rawDemandForHolds = await getLPDemandForHolds();
 		await holdBySource(rawDemandForHolds, src, dest, release);
 		await reloadHolds();
@@ -186,6 +189,7 @@
 
 	async function handleDispatch(truckId: number, dispatched: boolean) {
 		if (!isAdmin) return;
+		await captureUndo();
 		await updateTruckDispatch(truckId, { dispatched });
 		truckDispatch = await getLPTruckDispatch();
 	}
@@ -236,6 +240,7 @@
 
 	async function handleRegenerate() {
 		if (!isAdmin) return;
+		await captureUndo();
 		regenerating = true;
 		try {
 			// Build demand in engine format
@@ -584,48 +589,219 @@
 	</div>
 
 {:else if activeTab === 'late'}
-	<!-- Late Tab — basic arrival analysis -->
+	<!-- Late Tab — destination-aware late analysis -->
+	{@const today = new Date().toISOString().slice(0, 10)}
+	{@const todayMs = new Date(today).getTime()}
+
+	<!-- Compute latest dispatch date per destination from plan -->
+	{@const destLatestDispatch = (() => {
+		const m = new Map();
+		for (const r of planRows) {
+			if (!r.dispatch_date || !r.destination) continue;
+			const dest = destinations.find(d => r.destination.includes(d.name));
+			if (!dest) continue;
+			const abbr = dest.abbr;
+			if (!m.has(abbr) || r.dispatch_date > m.get(abbr)) m.set(abbr, r.dispatch_date);
+		}
+		return m;
+	})()}
+
+	<!-- Compute BI (built-in) date per dest: dispatch + transit + whs -->
+	{@const destBI = (() => {
+		const m = new Map();
+		for (const d of destinations) {
+			const disp = destLatestDispatch.get(d.abbr);
+			if (!disp) continue;
+			const base = new Date(disp);
+			base.setDate(base.getDate() + (d.transit_days || 0) + (d.whs_days || 0));
+			m.set(d.abbr, base.toISOString().slice(0, 10));
+		}
+		return m;
+	})()}
+
+	<!-- Build SKU -> destinations mapping from plan -->
+	{@const skuDests = (() => {
+		const m = new Map();
+		for (const r of planRows) {
+			if (!r.sku || !r.destination) continue;
+			const dest = destinations.find(d => r.destination.includes(d.name));
+			if (!dest) continue;
+			if (!m.has(r.sku)) m.set(r.sku, new Set());
+			m.get(r.sku).add(dest.abbr);
+		}
+		return m;
+	})()}
+
+	<!-- Active destinations (not excluded) -->
+	{@const activeDests = new Set(destinations.map(d => d.abbr).filter(a => !lateExclDests.has(a)))}
+
+	<!-- Late items: ready_date > today AND belongs to at least one active destination -->
 	{@const lateItems = arrivals.filter(a => {
-		if (!a.ready_date) return false;
-		const today = new Date().toISOString().slice(0, 10);
-		return a.ready_date > today;
-	}).sort((a, b) => (a.ready_date || '').localeCompare(b.ready_date || ''))}
-	<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
-		<StatBadge label="{lateItems.length} items not yet ready" variant={lateItems.length > 0 ? 'orange' : 'green'} />
-		<StatBadge label="{arrivals.filter(a => a.ready_date && a.ready_date <= new Date().toISOString().slice(0, 10)).length} ready now" variant="green" />
+		if (!a.ready_date || a.ready_date <= today) return false;
+		const dests = skuDests.get(a.sku);
+		if (!dests) return true;
+		return [...dests].some(d => activeDests.has(d));
+	}).sort((a, b) => (b.ready_date || '').localeCompare(a.ready_date || ''))}
+
+	<!-- Group late items by container -->
+	{@const containerGroups = (() => {
+		const m = new Map();
+		for (const a of lateItems) {
+			const cid = a.container || '__none__';
+			if (!m.has(cid)) m.set(cid, { container: a.container || '', arrival_date: a.arrival_date || '', ready_date: a.ready_date || '', items: [], dests: new Set() });
+			const g = m.get(cid);
+			if (a.ready_date > g.ready_date) g.ready_date = a.ready_date;
+			if (a.arrival_date && (!g.arrival_date || a.arrival_date < g.arrival_date)) g.arrival_date = a.arrival_date;
+			g.items.push(a);
+			const sd = skuDests.get(a.sku);
+			if (sd) sd.forEach((d: string) => g.dests.add(d));
+		}
+		return [...m.values()].sort((a, b) => b.ready_date.localeCompare(a.ready_date));
+	})()}
+
+	<!-- KPI computations -->
+	{@const lateContainers = new Set(lateItems.map(a => a.container).filter(Boolean)).size}
+	{@const affectedSkus = new Set(lateItems.map(a => a.sku)).size}
+	{@const destsHit = (() => {
+		const s = new Set();
+		for (const a of lateItems) { const d = skuDests.get(a.sku); if (d) d.forEach((x: string) => s.add(x)); }
+		return s.size;
+	})()}
+	{@const maxDelay = lateItems.reduce((mx, a) => {
+		const d = Math.ceil((new Date(a.ready_date).getTime() - todayMs) / 86400000);
+		return d > mx ? d : mx;
+	}, 0)}
+
+	<!-- Dest late status: does destination have late SKUs? (ignores exclusion for indicator) -->
+	{@const destHasLate = (() => {
+		const s = new Set();
+		for (const a of arrivals) {
+			if (!a.ready_date || a.ready_date <= today) continue;
+			const dests = skuDests.get(a.sku);
+			if (dests) dests.forEach((d: string) => s.add(d));
+		}
+		return s;
+	})()}
+
+	<!-- KPI Cards -->
+	<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px">
+		<div class="card" style="padding:14px 16px;text-align:center">
+			<div style="font-size:10px;color:var(--ts);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Late Containers</div>
+			<div style="font-size:24px;font-weight:800;color:{lateContainers > 0 ? 'var(--or)' : 'var(--gn)'};font-family:var(--fm)">{lateContainers}</div>
+		</div>
+		<div class="card" style="padding:14px 16px;text-align:center">
+			<div style="font-size:10px;color:var(--ts);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Affected SKUs</div>
+			<div style="font-size:24px;font-weight:800;color:{affectedSkus > 0 ? 'var(--or)' : 'var(--gn)'};font-family:var(--fm)">{affectedSkus}</div>
+		</div>
+		<div class="card" style="padding:14px 16px;text-align:center">
+			<div style="font-size:10px;color:var(--ts);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Destinations Hit</div>
+			<div style="font-size:24px;font-weight:800;color:{destsHit > 0 ? 'var(--rd)' : 'var(--gn)'};font-family:var(--fm)">{destsHit}</div>
+		</div>
+		<div class="card" style="padding:14px 16px;text-align:center">
+			<div style="font-size:10px;color:var(--ts);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Max Delay</div>
+			<div style="font-size:24px;font-weight:800;color:{maxDelay > 14 ? 'var(--rd)' : maxDelay > 7 ? 'var(--or)' : 'var(--gn)'};font-family:var(--fm)">{maxDelay}<span style="font-size:12px;font-weight:600">d</span></div>
+		</div>
 	</div>
 
-	{#if lateItems.length === 0}
-		<div class="card" style="text-align:center;padding:40px">
-			<div style="font-size:32px;margin-bottom:12px">✅</div>
-			<div style="font-size:14px;font-weight:700;margin-bottom:6px">All Items Ready</div>
-			<div style="font-size:12px;color:var(--ts)">All arrival items have passed their ready date.</div>
+	<!-- Main layout: sidebar + content -->
+	<div style="display:flex;gap:12px;height:calc(100vh - 280px)">
+		<!-- Destination Sidebar -->
+		<div class="card" style="width:200px;flex-shrink:0;padding:10px;overflow-y:auto">
+			<div style="font-size:10px;font-weight:700;color:var(--ts);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Destinations</div>
+			{#each destinations as d}
+				{@const hasLate = destHasLate.has(d.abbr)}
+				{@const isActive = !lateExclDests.has(d.abbr)}
+				{@const biDate = destBI.get(d.abbr)}
+				<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;margin-bottom:2px;background:{isActive ? 'transparent' : 'var(--bg)'};opacity:{isActive ? 1 : 0.5};transition:all .15s">
+					<input type="checkbox" checked={isActive}
+						onchange={() => { const s = new Set(lateExclDests); if (s.has(d.abbr)) s.delete(d.abbr); else s.add(d.abbr); lateExclDests = s; }}
+						style="accent-color:var(--ac);width:14px;height:14px;cursor:pointer">
+					<span style="width:8px;height:8px;border-radius:50%;background:{hasLate ? 'var(--rd)' : 'var(--gn)'};flex-shrink:0"></span>
+					<span style="flex:1">
+						<span style="font-size:12px;font-weight:700;font-family:var(--fm)">{d.abbr}</span>
+						<span style="font-size:10px;color:var(--ts);margin-left:4px">{d.name}</span>
+						{#if biDate}
+							<div style="font-size:9px;color:var(--tt);font-family:var(--fm);margin-top:1px">BI: {biDate}</div>
+						{/if}
+					</span>
+				</label>
+			{/each}
+			{#if destinations.length > 0}
+				<div style="margin-top:8px;display:flex;gap:4px">
+					<button class="rbtn" style="font-size:9px;flex:1" onclick={() => { lateExclDests = new Set(); }}>All</button>
+					<button class="rbtn" style="font-size:9px;flex:1" onclick={() => { lateExclDests = new Set(destinations.map(d => d.abbr)); }}>None</button>
+				</div>
+			{/if}
 		</div>
-	{:else}
-		<div style="overflow-x:auto;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);max-height:calc(100vh - 220px);overflow-y:auto">
-			<table class="dtb">
-				<thead style="position:sticky;top:0;background:var(--sf);z-index:10">
-					<tr><th>SKU</th><th>Name</th><th>Container</th><th>Qty</th><th>Arrival</th><th>Ready</th><th>Days Until Ready</th></tr>
-				</thead>
-				<tbody>
-					{#each lateItems as a}
-						{@const daysLeft = Math.ceil((new Date(a.ready_date).getTime() - Date.now()) / 86400000)}
-						<tr>
-							<td class="mono" style="font-weight:600">{a.sku}</td>
-							<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{a.name || '—'}</td>
-							<td class="mono" style="font-size:10px">{a.container || '—'}</td>
-							<td class="mono fw7">{(a.qty || 0).toLocaleString()}</td>
-							<td class="mono">{a.arrival_date || '—'}</td>
-							<td class="mono">{a.ready_date || '—'}</td>
-							<td class="mono" style="color:{daysLeft > 14 ? 'var(--rd)' : daysLeft > 7 ? 'var(--or)' : 'var(--gn)'};font-weight:700">
-								{daysLeft}d
-							</td>
-						</tr>
-					{/each}
-				</tbody>
-			</table>
+
+		<!-- Container-grouped detail view -->
+		<div style="flex:1;overflow-y:auto;min-width:0">
+			{#if lateItems.length === 0}
+				<div class="card" style="text-align:center;padding:40px">
+					<div style="font-size:32px;margin-bottom:12px">&#10003;</div>
+					<div style="font-size:14px;font-weight:700;margin-bottom:6px">All Items On Track</div>
+					<div style="font-size:12px;color:var(--ts)">No late arrivals for the selected destinations.</div>
+				</div>
+			{:else}
+				{#each containerGroups as cg}
+					{@const daysLate = Math.ceil((new Date(cg.ready_date).getTime() - todayMs) / 86400000)}
+					<div class="card" style="margin-bottom:8px;padding:0;overflow:hidden">
+						<!-- Container header -->
+						<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:{daysLate > 14 ? 'var(--rs)' : daysLate > 7 ? 'var(--os)' : 'var(--bg)'};border-bottom:1px solid var(--bd)">
+							<div style="flex:1;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+								<span style="font-size:13px;font-weight:800;font-family:var(--fm)">{cg.container || 'No Container'}</span>
+								<span style="font-size:10px;color:var(--ts)">Arrival: <b style="font-family:var(--fm)">{cg.arrival_date || '—'}</b></span>
+								<span style="font-size:10px;color:var(--ts)">Ready: <b style="font-family:var(--fm)">{cg.ready_date || '—'}</b></span>
+								<!-- Destination badges -->
+								{#each [...cg.dests].sort() as da}
+									<span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:4px;font-family:var(--fm);background:var(--ps);color:var(--pu)">{da}</span>
+								{/each}
+							</div>
+							<div style="text-align:right;flex-shrink:0">
+								<div style="font-size:20px;font-weight:800;font-family:var(--fm);color:{daysLate > 14 ? 'var(--rd)' : daysLate > 7 ? 'var(--or)' : 'var(--gn)'}">+{daysLate}d</div>
+								<div style="font-size:9px;color:var(--ts)">{cg.items.length} SKU{cg.items.length !== 1 ? 's' : ''}</div>
+							</div>
+						</div>
+						<!-- SKU rows -->
+						<table class="dtb" style="margin:0">
+							<thead>
+								<tr style="background:var(--sf)">
+									<th style="font-size:10px;padding:4px 10px">SKU</th>
+									<th style="font-size:10px;padding:4px 10px">Name</th>
+									<th style="font-size:10px;padding:4px 10px;text-align:right">Qty</th>
+									<th style="font-size:10px;padding:4px 10px">Ready</th>
+									<th style="font-size:10px;padding:4px 10px;text-align:right">Delay</th>
+									<th style="font-size:10px;padding:4px 10px">Destinations</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each cg.items as item}
+									{@const itemDelay = Math.ceil((new Date(item.ready_date).getTime() - todayMs) / 86400000)}
+									{@const itemDests = skuDests.get(item.sku)}
+									<tr>
+										<td class="mono" style="font-weight:600;font-size:11px">{item.sku}</td>
+										<td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px">{item.name || nomMap[item.sku]?.name || '—'}</td>
+										<td class="mono fw7" style="text-align:right;font-size:11px">{(item.qty || 0).toLocaleString()}</td>
+										<td class="mono" style="font-size:10px">{item.ready_date}</td>
+										<td class="mono" style="text-align:right;font-weight:700;font-size:11px;color:{itemDelay > 14 ? 'var(--rd)' : itemDelay > 7 ? 'var(--or)' : 'var(--gn)'}">+{itemDelay}d</td>
+										<td>
+											{#if itemDests}
+												{#each [...itemDests].sort() as da}
+													<span style="font-size:8px;font-weight:600;padding:1px 4px;border-radius:3px;font-family:var(--fm);background:var(--bg);color:var(--ts);margin-right:2px">{da}</span>
+												{/each}
+											{:else}
+												<span style="font-size:9px;color:var(--tt)">—</span>
+											{/if}
+										</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				{/each}
+			{/if}
 		</div>
-	{/if}
+	</div>
 {/if}
 
 <!-- Nom Update Modal -->

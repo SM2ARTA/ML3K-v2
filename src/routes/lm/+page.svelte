@@ -16,6 +16,7 @@
 	import { role } from '$lib/stores';
 	import { TabBar, StatBadge, Spinner, Card, ProgressBar, Modal, BottomBar } from '$lib/components';
 	import { buildLMPlan, type LMTruckDay } from '$lib/lm-engine';
+	import { captureUndo } from '$lib/undo';
 	import { exportLMDemand, exportLMVenues, exportLMTruckPlan } from '$lib/exports';
 
 	// ── State ──
@@ -257,6 +258,7 @@
 
 	// ── Dispatch ──
 	async function toggleDispatch(fp: string, dispatched: boolean) {
+		await captureUndo();
 		await updateLMDispatch(fp, dispatched);
 		dispatchState = await getLMDispatch();
 	}
@@ -267,6 +269,7 @@
 
 	// ── Demand Adjustments ──
 	async function setDemandAdj(venue: string, sku: string, newQty: string) {
+		await captureUndo();
 		const key = venue + '|' + sku;
 		const val = parseInt(newQty);
 		if (isNaN(val) || val < 0) { await removeLMDemandAdj(key); delete demandAdj[key]; }
@@ -335,6 +338,7 @@
 		showKitModal = false;
 	}
 	async function deleteKit(id: number) {
+		await captureUndo();
 		await removeLMKit(id);
 		kits = await getLMKits();
 	}
@@ -352,6 +356,7 @@
 		showStpModal = false;
 	}
 	async function deleteStp(id: number) {
+		await captureUndo();
 		await removeLMStpDelivery(id);
 		stpDeliveries = await getLMStpDeliveries();
 	}
@@ -934,6 +939,19 @@
 	{/if}
 {/if}
 
+<!-- Mobile bottom nav -->
+<nav class="lm-mobile-nav">
+	<button class="lm-nav-btn" class:active={sidebarOpen} onclick={() => { sidebarOpen = !sidebarOpen; }}>
+		<span class="lm-nav-icon">&#9776;</span> Venues
+	</button>
+	<button class="lm-nav-btn" class:active={activeTab === 'dashboard' && !sidebarOpen} onclick={() => { activeTab = 'dashboard'; sidebarOpen = false; }}>
+		<span class="lm-nav-icon">&#128202;</span> Dashboard
+	</button>
+	<button class="lm-nav-btn" class:active={activeTab === 'trucks' && !sidebarOpen} onclick={() => { activeTab = 'trucks'; sidebarOpen = false; }}>
+		<span class="lm-nav-icon">&#128667;</span> Trucks
+	</button>
+</nav>
+
 <style>
 	.sidebar { width:260px; flex-shrink:0; border-right:1px solid var(--bd); overflow-y:auto; background:var(--sf); }
 	.vi { padding: 6px 12px; cursor: pointer; border-left: 3px solid transparent; transition: all .12s; }
@@ -947,7 +965,26 @@
 	.day-header { font-size:11px; font-weight:700; color:var(--ts); margin-bottom:6px; padding-bottom:4px; border-bottom:1px solid var(--bd); }
 	.truck-card { background:var(--sf); border:1px solid var(--bd); border-radius:var(--r); padding:12px; min-width:220px; max-width:280px; }
 
+	/* Mobile bottom nav — hidden on desktop */
+	.lm-mobile-nav {
+		display: none;
+		position: fixed; bottom: 0; left: 0; right: 0;
+		height: 52px; z-index: 80;
+		background: var(--sf); border-top: 1px solid var(--bd);
+		justify-content: space-around; align-items: center;
+		padding: 0 4px;
+	}
+	.lm-nav-btn {
+		flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+		gap: 2px; border: none; background: transparent; cursor: pointer;
+		color: var(--ts); font-size: 10px; font-family: var(--fd); font-weight: 600;
+		padding: 4px 0; transition: color .12s;
+	}
+	.lm-nav-btn:hover, .lm-nav-btn.active { color: var(--ac); }
+	.lm-nav-icon { font-size: 18px; line-height: 1; }
+
 	@media (max-width: 768px) {
-		.sidebar { position:fixed; left:0; top:48px; bottom:0; z-index:50; box-shadow:4px 0 12px rgba(0,0,0,.1); }
+		.sidebar { position:fixed; left:0; top:48px; bottom:52px; z-index:50; box-shadow:4px 0 12px rgba(0,0,0,.1); }
+		.lm-mobile-nav { display: flex; }
 	}
 </style>

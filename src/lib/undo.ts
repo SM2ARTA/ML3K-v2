@@ -18,17 +18,23 @@ export async function captureUndo() {
 		const tables: Record<string, any[]> = {};
 
 		// Capture the tables that change most frequently
-		const [plan, dispatch, holds, customs] = await Promise.all([
+		const [plan, dispatch, holds, customs, lmDispatch, lmDemandAdj, lmExcluded] = await Promise.all([
 			supabase.from('lp_plan').select('*'),
 			supabase.from('lp_truck_dispatch').select('*'),
 			supabase.from('lp_holds').select('*'),
-			supabase.from('lp_customs_overrides').select('*')
+			supabase.from('lp_customs_overrides').select('*'),
+			supabase.from('lm_dispatch').select('*'),
+			supabase.from('lm_demand_adj').select('*'),
+			supabase.from('lm_excluded').select('*')
 		]);
 
 		if (plan.data) tables['lp_plan'] = plan.data;
 		if (dispatch.data) tables['lp_truck_dispatch'] = dispatch.data;
 		if (holds.data) tables['lp_holds'] = holds.data;
 		if (customs.data) tables['lp_customs_overrides'] = customs.data;
+		if (lmDispatch.data) tables['lm_dispatch'] = lmDispatch.data;
+		if (lmDemandAdj.data) tables['lm_demand_adj'] = lmDemandAdj.data;
+		if (lmExcluded.data) tables['lm_excluded'] = lmExcluded.data;
 
 		undoStack.push({ timestamp: new Date().toISOString(), tables });
 		if (undoStack.length > MAX_UNDO) undoStack.shift();
@@ -45,7 +51,11 @@ export async function restoreUndo(): Promise<boolean> {
 	try {
 		for (const [table, rows] of Object.entries(snap.tables)) {
 			// Clear current data
-			const pkCol = table === 'lp_plan' ? 'id' : table === 'lp_holds' ? 'id' : table === 'lp_truck_dispatch' ? 'truck_id' : 'sku';
+			const pkMap: Record<string, string> = {
+				lp_plan: 'id', lp_holds: 'id', lp_truck_dispatch: 'truck_id', lp_customs_overrides: 'sku',
+				lm_dispatch: 'fingerprint', lm_demand_adj: 'venue_sku', lm_excluded: 'item_id'
+			};
+			const pkCol = pkMap[table] || 'id';
 			await supabase.from(table).delete().neq(pkCol, '___never___');
 
 			// Restore snapshot rows in batches
