@@ -6,7 +6,7 @@
 		createSvelteTable,
 		type ColumnDef,
 		type SortingState
-	} from '$lib/table';
+	} from '$lib/table.svelte';
 	import {
 		getCoreRowModel,
 		getSortedRowModel,
