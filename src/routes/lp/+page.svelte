@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { getLPDemand, getLPHolds, getLPTruckSummary, getLPPlan, getLPDestinations, getLPTruckDispatch, getLPArrivals, getStockReport, updateCustomsOverride, toggleHSConfirm, updateTruckDispatch, saveLSR, holdBySource, getLPDemandForHolds } from '$lib/db';
+	import { getLPDemand, getLPHolds, getLPTruckSummary, getLPPlan, getLPDestinations, getLPTruckDispatch, getLPArrivals, getStockReport, getLPSettings, updateCustomsOverride, toggleHSConfirm, updateTruckDispatch, saveLSR, holdBySource, getLPDemandForHolds, updateLPSettings, updateDestination } from '$lib/db';
 	import { role } from '$lib/stores';
-	import { TabBar, StatBadge, Spinner, SearchInput, FilterDropdown, DestBadge, EditableCell, ConfirmButton, TruckCard, HoldBar } from '$lib/components';
+	import { TabBar, StatBadge, Spinner, SearchInput, FilterDropdown, DestBadge, EditableCell, ConfirmButton, TruckCard, HoldBar, BottomBar } from '$lib/components';
 	import { fmtDate } from '$lib/utils';
+	import { exportLPPlan, exportLPDemand, exportLPArrivals } from '$lib/exports';
 	import { createSvelteTable, type ColumnDef, type SortingState } from '$lib/table.svelte';
 	import { getCoreRowModel, getSortedRowModel, getFilteredRowModel } from '@tanstack/table-core';
 
@@ -22,6 +23,7 @@
 	let arrivals = $state<any[]>([]);
 	let stockMap = $state<Map<string, number>>(new Map());
 	let rawDemandForHolds = $state<any[]>([]);
+	let settings = $state<any>({ turnaround: 6, max_pallets: 26, max_trucks: 4, max_dests: 3, plan_generated: false });
 	let loading = $state(true);
 	let activeTab = $state('demand');
 	let globalFilter = $state('');
@@ -144,11 +146,12 @@
 
 	onMount(async () => {
 		loading = true;
-		const [d, h, p, td, dest, arr, stock] = await Promise.all([
-			getLPDemand(), getLPHolds(), getLPPlan(), getLPTruckDispatch(), getLPDestinations(), getLPArrivals(), getStockReport()
+		const [d, h, p, td, dest, arr, stock, sets] = await Promise.all([
+			getLPDemand(), getLPHolds(), getLPPlan(), getLPTruckDispatch(), getLPDestinations(), getLPArrivals(), getStockReport(), getLPSettings()
 		]);
 		rawDemand = d; holds = h; planRows = p; truckDispatch = td; destinations = dest; arrivals = arr;
 		stockMap = new Map(stock.map((s: any) => [s.sku, s.qty]));
+		if (sets) settings = sets;
 		loading = false;
 	});
 
@@ -285,6 +288,53 @@
 		<StatBadge label="🔒 {trucks.filter(t => t.dispatched).length} locked" variant="green" />
 	</div>
 
+	<!-- Engine Settings -->
+	{#if isAdmin}
+		<details style="margin-bottom:12px">
+			<summary style="font-size:11px;font-weight:600;color:var(--ts);cursor:pointer;user-select:none">⚙ Engine Settings</summary>
+			<div class="card" style="margin-top:6px;padding:12px">
+				<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px">
+					<div><label style="font-size:10px;color:var(--ts);font-weight:600;display:block;margin-bottom:2px">Truck Capacity (plt)</label>
+						<input type="number" value={settings.max_pallets} min="1" onchange={(e) => { settings.max_pallets = +e.currentTarget.value; updateLPSettings({max_pallets: settings.max_pallets}) }}
+							style="width:100%;padding:5px 8px;border:1px solid var(--bd);border-radius:4px;font-size:12px;font-family:var(--fm);outline:none"></div>
+					<div><label style="font-size:10px;color:var(--ts);font-weight:600;display:block;margin-bottom:2px">Max Trucks/Day</label>
+						<input type="number" value={settings.max_trucks} min="1" onchange={(e) => { settings.max_trucks = +e.currentTarget.value; updateLPSettings({max_trucks: settings.max_trucks}) }}
+							style="width:100%;padding:5px 8px;border:1px solid var(--bd);border-radius:4px;font-size:12px;font-family:var(--fm);outline:none"></div>
+					<div><label style="font-size:10px;color:var(--ts);font-weight:600;display:block;margin-bottom:2px">Max Dests/Day</label>
+						<input type="number" value={settings.max_dests} min="1" onchange={(e) => { settings.max_dests = +e.currentTarget.value; updateLPSettings({max_dests: settings.max_dests}) }}
+							style="width:100%;padding:5px 8px;border:1px solid var(--bd);border-radius:4px;font-size:12px;font-family:var(--fm);outline:none"></div>
+					<div><label style="font-size:10px;color:var(--ts);font-weight:600;display:block;margin-bottom:2px">WH Turnaround (days)</label>
+						<input type="number" value={settings.turnaround} min="0" onchange={(e) => { settings.turnaround = +e.currentTarget.value; updateLPSettings({turnaround: settings.turnaround}) }}
+							style="width:100%;padding:5px 8px;border:1px solid var(--bd);border-radius:4px;font-size:12px;font-family:var(--fm);outline:none"></div>
+					<div><label style="font-size:10px;color:var(--ts);font-weight:600;display:block;margin-bottom:2px">RIC Start Date</label>
+						<input type="date" value={settings.ric_start_date} onchange={(e) => { settings.ric_start_date = e.currentTarget.value; updateLPSettings({ric_start_date: settings.ric_start_date}) }}
+							style="width:100%;padding:5px 8px;border:1px solid var(--bd);border-radius:4px;font-size:12px;font-family:var(--fd);outline:none"></div>
+				</div>
+			</div>
+		</details>
+
+		<details style="margin-bottom:12px">
+			<summary style="font-size:11px;font-weight:600;color:var(--ts);cursor:pointer;user-select:none">🚚 Transit Times</summary>
+			<div class="card" style="margin-top:6px;padding:12px">
+				<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
+					{#each destinations as d}
+						<div><label style="font-size:10px;color:var(--ts);font-weight:600;display:block;margin-bottom:2px">{d.name}</label>
+							<div style="display:flex;gap:4px">
+								<input type="number" value={d.transit_days} min="0" max="30" title="Transit days"
+									onchange={(e) => updateDestination(d.abbr, {transit_days: +e.currentTarget.value})}
+									style="flex:1;padding:4px 6px;border:1px solid var(--bd);border-radius:4px;font-size:11px;font-family:var(--fm);outline:none">
+								<input type="number" value={d.whs_days} min="0" max="30" title="WHS processing days"
+									onchange={(e) => updateDestination(d.abbr, {whs_days: +e.currentTarget.value})}
+									style="flex:1;padding:4px 6px;border:1px solid var(--bd);border-radius:4px;font-size:11px;font-family:var(--fm);outline:none">
+							</div>
+							<div style="font-size:8px;color:var(--tt);margin-top:1px">transit / whs</div>
+						</div>
+					{/each}
+				</div>
+			</div>
+		</details>
+	{/if}
+
 	{#if trucks.length === 0}
 		<div class="card" style="text-align:center;padding:40px">
 			<div style="font-size:32px;margin-bottom:12px">🚛</div>
@@ -357,4 +407,22 @@
 		<div style="font-size:14px;font-weight:700;margin-bottom:8px">⚠ Late Analysis</div>
 		<div style="font-size:12px;color:var(--ts)">Coming soon — requires LM dispatch dates for comparison</div>
 	</div>
+{/if}
+
+<!-- Bottom Bar -->
+{#if !loading}
+	<BottomBar>
+		{#if activeTab === 'demand' && data.length}
+			<button class="rbtn" style="background:var(--as);color:var(--ac);border-color:var(--ab)"
+				onclick={() => exportLPDemand(data)}>⬇ Export Demand</button>
+		{/if}
+		{#if activeTab === 'plan' && planRows.length}
+			<button class="rbtn" style="background:var(--as);color:var(--ac);border-color:var(--ab)"
+				onclick={() => exportLPPlan(planRows, truckDispatch, destinations, 26)}>⬇ Export Plan</button>
+		{/if}
+		{#if activeTab === 'arrivals' && arrivals.length}
+			<button class="rbtn" style="background:var(--as);color:var(--ac);border-color:var(--ab)"
+				onclick={() => exportLPArrivals(arrivals)}>⬇ Export Arrivals</button>
+		{/if}
+	</BottomBar>
 {/if}

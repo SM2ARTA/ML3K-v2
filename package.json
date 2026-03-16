@@ -23,6 +23,8 @@
 	"dependencies": {
 		"@supabase/supabase-js": "^2.99.1",
 		"@sveltejs/adapter-vercel": "^6.3.3",
-		"@tanstack/table-core": "^8.21.3"
+		"@tanstack/table-core": "^8.21.3",
+		"exceljs": "^4.4.0",
+		"xlsx": "^0.18.5"
 	}
 }

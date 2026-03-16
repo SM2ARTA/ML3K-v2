@@ -11,3 +11,4 @@ export { default as ConfirmButton } from './ConfirmButton.svelte';
 export { default as FilterDropdown } from './FilterDropdown.svelte';
 export { default as TruckCard } from './TruckCard.svelte';
 export { default as HoldBar } from './HoldBar.svelte';
+export { default as BottomBar } from './BottomBar.svelte';
