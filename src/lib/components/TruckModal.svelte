@@ -2,11 +2,11 @@
 	import Modal from './Modal.svelte';
 	import DestBadge from './DestBadge.svelte';
 	import ProgressBar from './ProgressBar.svelte';
-	import { exportLPDemand } from '$lib/exports';
+	import { exportCI } from '$lib/exports';
 
-	let { open = $bindable(false), truckId, planRows, truckDispatch, maxPallets = 26, nomenclature = {} }: {
+	let { open = $bindable(false), truckId, planRows, truckDispatch, maxPallets = 26, nomenclature = {}, customsOverrides = {} }: {
 		open: boolean; truckId: number; planRows: any[]; truckDispatch: any[];
-		maxPallets?: number; nomenclature?: Record<string, any>;
+		maxPallets?: number; nomenclature?: Record<string, any>; customsOverrides?: Record<string, any>;
 	} = $props();
 
 	// Filter plan rows for this truck and aggregate by SKU
@@ -39,6 +39,12 @@
 		{#if disp?.lsr_number}
 			<span style="font-size:10px;color:var(--pu);background:var(--ps);padding:2px 6px;border-radius:4px;font-family:var(--fm)">{disp.lsr_number}</span>
 		{/if}
+	</div>
+
+	<!-- Actions -->
+	<div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
+		<button class="rbtn" style="background:var(--ps);color:var(--pu);border-color:#D4C5FE"
+			onclick={() => exportCI(truckId, planRows, nomenclature, customsOverrides)}>📄 Export CI</button>
 	</div>
 
 	<!-- Capacity -->

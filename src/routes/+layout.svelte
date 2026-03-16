@@ -4,8 +4,10 @@
 	import { supabase } from '$lib/supabase';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { HelpDialog } from '$lib/components';
 
 	let { children } = $props();
+	let helpOpen = $state(false);
 
 	onMount(async () => {
 		try {
@@ -33,7 +35,7 @@
 			<div style="display:flex;align-items:center;gap:12px">
 				<div>
 					<div style="font-size:14px;font-weight:700">
-						ML3K <span style="color:var(--ac);font-size:10px">v2</span> <span style="font-size:8px;color:var(--tt);font-weight:400">b0316j</span>
+						ML3K <span style="color:var(--ac);font-size:10px">v2</span> <span style="font-size:8px;color:var(--tt);font-weight:400">b0316k</span>
 						<span style="font-size:10px;padding:2px 6px;border-radius:4px;margin-left:4px;{$role === 'admin' ? 'background:var(--as);color:var(--ac)' : 'background:var(--bg);color:var(--ts)'}">
 							{$role === 'admin' ? 'Admin ✕' : 'Viewer'}
 						</span>
@@ -44,12 +46,16 @@
 					</div>
 				</div>
 			</div>
-			<div class="mod-sw">
-				<button class="mod-btn" class:active={$activeModule === 'v26'} onclick={() => switchModule('v26')}>🌍 Vision</button>
-				<button class="mod-btn" class:active={$activeModule === 'lp'} onclick={() => switchModule('lp')}>📦 Load Plan</button>
-				<button class="mod-btn" class:active={$activeModule === 'lm'} onclick={() => switchModule('lm')}>🚛 Last Mile</button>
+			<div style="display:flex;align-items:center;gap:8px">
+				<div class="mod-sw">
+					<button class="mod-btn" class:active={$activeModule === 'v26'} onclick={() => switchModule('v26')}>🌍 Vision</button>
+					<button class="mod-btn" class:active={$activeModule === 'lp'} onclick={() => switchModule('lp')}>📦 Load Plan</button>
+					<button class="mod-btn" class:active={$activeModule === 'lm'} onclick={() => switchModule('lm')}>🚛 Last Mile</button>
+				</div>
+				<button class="rbtn" onclick={() => helpOpen = true} style="font-size:10px;padding:4px 8px">? Help</button>
 			</div>
 		</header>
+		<HelpDialog bind:open={helpOpen} />
 		<main class="app-body">
 			{@render children()}
 		</main>

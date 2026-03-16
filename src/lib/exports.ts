@@ -105,6 +105,110 @@ export function exportLPDemand(data: any[]) {
 	XLSX.writeFile(wb, `LP-Demand-${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
 
+/** Get CI party data based on destination */
+function getCIParties(dest: string) {
+	const u = (dest || '').toUpperCase();
+	if (u.includes('TORONTO') || u.includes('VANCOUVER') || u.includes('CAN'))
+		return {
+			consignee: ['FWC26 Canada Football Ltd', '67 Mowat Avenue, Ste# 200', 'Toronto, ON M6K3E3', 'Canada', 'Business no: 773064001RM0001', ''],
+			broker: ['Rock It Cargo Canada', 'c/o Pacific Customs Broker', '', 'Contact: fifa.canada@rockitcargo.com', '', '']
+		};
+	if (u.includes('MEXICO') || u.includes('GUADAL') || u.includes('MONTER') || u.includes('MEX'))
+		return {
+			consignee: ['FWC2026 Mexico, S. De R.L. de C.V.', 'Av Paseo de la Reforma 350 - Piso 12', 'Col. Juarez, Alcaldia Cuauhtemoc', 'CP0660, CDMX', 'Mexico', ''],
+			broker: ['Cargolive, S.DE R.L.DE C.V.', 'Platon #409 - Colonia Poloanco V Seccion', 'Alcaldia Miguel Hidalgo - C.P. 11560 CDMX', 'MEXICO', 'Contact: fifa.mexico@rockitcargo.com', '']
+		};
+	return { consignee: ['', '', '', '', '', ''], broker: ['', '', '', '', '', ''] };
+}
+
+/** Export Commercial Invoice + Packing List for a single truck (SheetJS) */
+export function exportCI(
+	truckId: number,
+	planRows: any[],
+	nomenclature: Record<string, any>,
+	customsOverrides: Record<string, any>
+) {
+	const items = planRows.filter(r => r.truck_id === truckId);
+	if (!items.length) return;
+
+	const dest = items[0].destination || '';
+	const date = items[0].dispatch_date || '';
+	const wb = XLSX.utils.book_new();
+
+	// Aggregate by SKU
+	const skuMap = new Map<string, { sku: string; name: string; qty: number; pallets: number }>();
+	for (const r of items) {
+		if (!skuMap.has(r.sku)) skuMap.set(r.sku, { sku: r.sku, name: r.name || '', qty: 0, pallets: 0 });
+		const s = skuMap.get(r.sku)!;
+		s.qty += r.qty || 0;
+		s.pallets += r.pallets || 0;
+	}
+	const agg = [...skuMap.values()];
+	const totalPlt = agg.reduce((s, r) => s + r.pallets, 0);
+
+	// Helper: get customs data with override fallback
+	function custNom(sku: string) {
+		const n = nomenclature[sku] || {};
+		const o = customsOverrides[sku] || {};
+		return {
+			name: o.customs_name || n.customs_name || n.name || '',
+			hsCode: o.hs_code || n.hs_code || '',
+			country: o.country || n.country || '',
+			unitPrice: o.price !== undefined ? o.price : (n.unit_price || 0)
+		};
+	}
+
+	// Sheet 1: Commercial Invoice
+	let tQ = 0, tV = 0;
+	const ciRows = agg.map(it => {
+		const nm = custNom(it.sku);
+		const up = nm.unitPrice || 0;
+		const tv = it.qty * up;
+		tQ += it.qty; tV += tv;
+		return {
+			'QTY': it.qty, 'DESCRIPTION': nm.name || it.name || it.sku, 'ITEM #': it.sku,
+			'HS CODE': nm.hsCode, 'COUNTRY': nm.country, 'CURRENCY': 'USD',
+			'UNIT VALUE': up, 'TOTAL VALUE': tv, 'Pallets': +it.pallets.toFixed(2)
+		};
+	});
+	ciRows.push({ 'QTY': tQ, 'DESCRIPTION': 'TOTAL', 'ITEM #': '', 'HS CODE': '', 'COUNTRY': '', 'CURRENCY': '', 'UNIT VALUE': '', 'TOTAL VALUE': tV, 'Pallets': +totalPlt.toFixed(2) } as any);
+
+	const pty = getCIParties(dest);
+	const ciHeader = [
+		['COMBINED INVOICE AND PACKING LIST'], [''],
+		['DATE:', date, '', 'INVOICE #:', 'LP-' + truckId + '-' + date],
+		['DELIVERY LOCATION:', dest],
+		['Incoterms:', 'DDP', 'Terms of Payment:', 'Freight Prepaid'],
+		['Mode of Transport:', 'Road'], [''],
+		['SHIPPER:', 'FWC2026 US, Inc, 396 Alhambra Circle, Ste# 400, Coral Gables, FL 33134, USA'],
+		['CONSIGNEE:', pty.consignee.filter(Boolean).join(', ')],
+		['CUSTOMS BROKER:', pty.broker.filter(Boolean).join(', ')], ['']
+	];
+	const ws = XLSX.utils.aoa_to_sheet(ciHeader);
+	XLSX.utils.sheet_add_json(ws, ciRows, { origin: 'A12' });
+	ws['!cols'] = [{ wch: 8 }, { wch: 36 }, { wch: 22 }, { wch: 16 }, { wch: 20 }, { wch: 8 }, { wch: 12 }, { wch: 14 }, { wch: 10 }];
+	XLSX.utils.book_append_sheet(wb, ws, 'Commercial Invoice');
+
+	// Sheet 2: Packing List
+	const plHeader = [
+		['PACKING LIST'], [''],
+		['Truck:', 'LP-' + truckId, 'Date:', date, 'Destination:', dest],
+		['Items:', tQ, 'Pallets:', +totalPlt.toFixed(2), 'Total Value:', tV], ['']
+	];
+	const plRows = agg.map((it, i) => {
+		const nm = custNom(it.sku);
+		const up = nm.unitPrice || 0;
+		return { '#': i + 1, 'Code': it.sku, 'Name': nm.name || it.name || it.sku, 'Qty': it.qty, 'Pallets': +it.pallets.toFixed(3), 'HS Code': nm.hsCode, 'Country': nm.country, 'Unit Price': up, 'Line Total': up * it.qty };
+	});
+	plRows.push({ '#': '' as any, 'Code': '', 'Name': 'TOTAL', 'Qty': tQ, 'Pallets': +totalPlt.toFixed(2), 'HS Code': '', 'Country': '', 'Unit Price': '' as any, 'Line Total': tV });
+	const ps = XLSX.utils.aoa_to_sheet(plHeader);
+	XLSX.utils.sheet_add_json(ps, plRows, { origin: 'A6' });
+	ps['!cols'] = [{ wch: 4 }, { wch: 22 }, { wch: 36 }, { wch: 8 }, { wch: 10 }, { wch: 16 }, { wch: 14 }, { wch: 10 }, { wch: 14 }];
+	XLSX.utils.book_append_sheet(wb, ps, 'Packing List');
+
+	XLSX.writeFile(wb, `CI_T${truckId}_${dest.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`);
+}
+
 /** Export LP Arrivals to Excel */
 export function exportLPArrivals(arrivals: any[]) {
 	if (!arrivals.length) return;

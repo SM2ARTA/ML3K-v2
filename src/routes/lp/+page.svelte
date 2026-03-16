@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { getLPDemand, getLPHolds, getLPTruckSummary, getLPPlan, getLPDestinations, getLPTruckDispatch, getLPArrivals, getStockReport, getLPSettings, updateCustomsOverride, toggleHSConfirm, updateTruckDispatch, saveLSR, holdBySource, getLPDemandForHolds, updateLPSettings, updateDestination } from '$lib/db';
+	import { getLPDemand, getLPHolds, getLPTruckSummary, getLPPlan, getLPDestinations, getLPTruckDispatch, getLPArrivals, getStockReport, getLPSettings, getLPNomenclature, getLPCustomsOverrides, updateCustomsOverride, toggleHSConfirm, updateTruckDispatch, saveLSR, holdBySource, getLPDemandForHolds, updateLPSettings, updateDestination } from '$lib/db';
 	import { role } from '$lib/stores';
 	import { TabBar, StatBadge, Spinner, SearchInput, FilterDropdown, DestBadge, EditableCell, ConfirmButton, TruckCard, HoldBar, BottomBar, TruckModal } from '$lib/components';
 	import { fmtDate } from '$lib/utils';
@@ -24,6 +24,8 @@
 	let stockMap = $state<Map<string, number>>(new Map());
 	let rawDemandForHolds = $state<any[]>([]);
 	let settings = $state<any>({ turnaround: 6, max_pallets: 26, max_trucks: 4, max_dests: 3, plan_generated: false });
+	let nomMap = $state<Record<string, any>>({});
+	let custOvrMap = $state<Record<string, any>>({});
 	let loading = $state(true);
 	let truckModalOpen = $state(false);
 	let selectedTruckId = $state(0);
@@ -148,12 +150,14 @@
 
 	onMount(async () => {
 		loading = true;
-		const [d, h, p, td, dest, arr, stock, sets] = await Promise.all([
-			getLPDemand(), getLPHolds(), getLPPlan(), getLPTruckDispatch(), getLPDestinations(), getLPArrivals(), getStockReport(), getLPSettings()
+		const [d, h, p, td, dest, arr, stock, sets, noms, custOvr] = await Promise.all([
+			getLPDemand(), getLPHolds(), getLPPlan(), getLPTruckDispatch(), getLPDestinations(), getLPArrivals(), getStockReport(), getLPSettings(), getLPNomenclature(), getLPCustomsOverrides()
 		]);
 		rawDemand = d; holds = h; planRows = p; truckDispatch = td; destinations = dest; arrivals = arr;
 		stockMap = new Map(stock.map((s: any) => [s.sku, s.qty]));
 		if (sets) settings = sets;
+		nomMap = Object.fromEntries((noms || []).map((n: any) => [n.sku, n]));
+		custOvrMap = Object.fromEntries((custOvr || []).map((c: any) => [c.sku, c]));
 		loading = false;
 	});
 
@@ -413,7 +417,7 @@
 {/if}
 
 <!-- Truck Detail Modal -->
-<TruckModal bind:open={truckModalOpen} truckId={selectedTruckId} {planRows} {truckDispatch} maxPallets={settings.max_pallets} />
+<TruckModal bind:open={truckModalOpen} truckId={selectedTruckId} {planRows} {truckDispatch} maxPallets={settings.max_pallets} nomenclature={nomMap} customsOverrides={custOvrMap} />
 
 <!-- Bottom Bar -->
 {#if !loading}
