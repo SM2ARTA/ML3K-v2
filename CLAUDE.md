@@ -65,25 +65,30 @@ supabase/
 | Global search | ✅ Done | TanStack globalFilter |
 | Plan tab with truck cards grouped by date | ✅ Basic | `LP_renderPlan()` |
 | Arrivals table | ✅ Basic | `LP_renderArrivals()` |
-| **Hold by source bar** | ❌ Not ported | Hold/Release buttons + dest status badges |
+| **Hold by source bar** | ✅ Done | `HoldBar.svelte` + `holdBySource()` in db.ts |
 | **Combined CI button + modal** | ❌ Not ported | `LP_showCombinedCIModal()` |
-| **CAN/MEX/USA dest quick-select** | ❌ Not ported | `_lpDemDestGroup()` |
-| **HS Code Assistant (AI wizard)** | ❌ Not ported | `LP_showHSLookup()` |
-| **Stock qty column** | ❌ Not ported | `STOCK_QTYS` display |
-| **Destination color coding** | ❌ Not ported | `LP_destColor()` |
-| **Truck card click → detail modal** | ❌ Not ported | `LP_showTruckModal()` |
-| **CI export (per truck)** | ❌ Not ported | `LP_exportCI_ExcelJS()` |
-| **Plan export (Excel)** | ❌ Not ported | `LP_exportPlan()` |
-| **Lock/dispatch with Supabase save** | ❌ Not ported | `LP_toggleDispatch()` |
-| **Date change on trucks** | ❌ Not ported | `LP_changeDate()` |
-| **LSR save to Supabase** | ❌ Not ported | `LP_lsrSave()` |
+| **CAN/MEX/USA dest quick-select** | ✅ Partial | In HoldBar, not yet in filter dropdown |
+| **HS Code Assistant (AI wizard)** | ✅ Done | `HSLookup.svelte` + `hs-utils.ts` + `hs-data.ts` |
+| **Stock qty column** | ✅ Done | Green/red color coding |
+| **Destination color coding** | ✅ Done | `destColor()` in utils.ts, DestBadge uses it |
+| **Truck card click → detail modal** | ✅ Done | `TruckModal.svelte` with SKU manifest |
+| **CI export (per truck)** | ✅ Done | `exportCI()` in exports.ts with party data |
+| **Plan export (Excel)** | ✅ Done | `exportLPPlan()` with 2 sheets |
+| **Demand export (Excel)** | ✅ Done | `exportLPDemand()` |
+| **Arrivals export (Excel)** | ✅ Done | `exportLPArrivals()` |
+| **Lock/dispatch with Supabase save** | ✅ Done | `updateTruckDispatch()` |
+| **Date change on trucks** | ✅ Done | Date picker in TruckCard |
+| **LSR save to Supabase** | ✅ Done | `saveLSR()` |
+| **Engine settings (collapsible)** | ✅ Done | Plan tab, saves to lp_settings |
+| **Transit times (collapsible)** | ✅ Done | Plan tab, saves to lp_destinations |
+| **File upload (nom, demand, arrivals)** | ✅ Done | `/lp/upload` with auto-detect + batch save |
 | **Container date overrides** | ❌ Not ported | `LP_setContDate()` |
 | **Manual arrivals** | ❌ Not ported | `LP_addArrivalItem()` |
 | **Pallet overrides** | ❌ Not ported | `LP_setPalletOvr()` |
 | **Late tab (cross-module)** | ❌ Not ported | `LP_renderLate()` |
-| **Plan regeneration engine** | ❌ Not ported | `LP_buildLoadPlan()`, `LP_regenerate()` |
-| **File upload (nom, demand, arrivals)** | ❌ Not ported | `LP_parseNomenclature()` etc. |
+| **Plan regeneration engine** | ❌ Stub only | `LP_buildLoadPlan()` — uses v1 output from DB |
 | **Nom update (partial re-import)** | ❌ Not ported | `LP_updateNomPrompt()` |
+| **Combined CI modal** | ❌ Not ported | Multi-dest CI export |
 
 ### LM Module — Last Mile
 | Feature | Status |
@@ -107,10 +112,11 @@ supabase/
 ### Shared Features
 | Feature | Status |
 |---|---|
-| Backup/Restore (Excel) | ❌ Not ported |
+| Backup/Restore (Excel) | ✅ Done | `backup.ts` — 17 tables to Excel, restore from Excel |
+| Help dialog | ✅ Done | `HelpDialog.svelte` — full system guide |
+| Bottom support bar | ✅ Done | `BottomBar.svelte` — context-sensitive exports |
+| Backup/Restore buttons | ✅ Done | Header — 💾 Backup, 📂 Restore |
 | Undo system | ❌ Not ported |
-| Help dialog | ❌ Not ported |
-| Bottom support bar | ❌ Not ported |
 | Real-time multi-admin sync | ❌ Not built |
 | Supabase Auth (replace password) | ❌ Not built |
 
