@@ -7,10 +7,22 @@
 -- The shared_state table is NOT modified — v1 keeps working.
 -- ============================================================================
 
+-- ── Set datestyle to handle DD.MM.YYYY format from v1 ──
+SET datestyle = 'ISO, DMY';
+
 -- ── Helper to parse v1 JSON ──
 CREATE OR REPLACE FUNCTION _v1(key_id text) RETURNS jsonb AS $$
   SELECT value::jsonb FROM shared_state WHERE id = key_id;
 $$ LANGUAGE sql STABLE;
+
+-- ── Helper to safely parse dates in various formats ──
+CREATE OR REPLACE FUNCTION _safe_date(val text) RETURNS date AS $$
+BEGIN
+  IF val IS NULL OR val = '' THEN RETURN NULL; END IF;
+  RETURN val::date;
+EXCEPTION WHEN OTHERS THEN RETURN NULL;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
 
 -- ============================================================================
 -- LP CONFIG
@@ -103,12 +115,12 @@ BEGIN
       item->>'name',
       item->>'container',
       COALESCE((item->>'qty')::int, 0),
-      NULLIF(item->>'arrivalDate', '')::date,
-      NULLIF(item->>'readyDate', '')::date,
+      _safe_date(item->>'arrivalDate'),
+      _safe_date(item->>'readyDate'),
       COALESCE((item->>'availPallets')::numeric, 0),
       COALESCE((item->>'_manual')::boolean, false),
       item->>'_localName',
-      NULLIF(item->>'_origArrDate', '')::date
+      _safe_date(item->>'_origArrDate')
     );
   END LOOP;
   RAISE NOTICE 'LP Arrivals: % rows migrated', (SELECT count(*) FROM lp_arrivals);
@@ -128,7 +140,7 @@ BEGIN
     INSERT INTO lp_plan (truck_id, dispatch_date, destination, sku, name, qty, pallets)
     VALUES (
       COALESCE((item->>'truckId')::int, 0),
-      NULLIF(item->>'date', '')::date,
+      _safe_date(item->>'date'),
       item->>'destination',
       item->>'sku',
       item->>'name',
@@ -174,7 +186,7 @@ BEGIN
   IF ts->'contDateOverrides' IS NOT NULL THEN
     FOR k, v IN SELECT * FROM jsonb_each(ts->'contDateOverrides') LOOP
       INSERT INTO lp_container_overrides (container, override_date)
-      VALUES (k, (v#>>'{}')::date)
+      VALUES (k, _safe_date(v#>>'{}'))
       ON CONFLICT (container) DO UPDATE SET override_date = EXCLUDED.override_date;
     END LOOP;
   END IF;
@@ -339,7 +351,7 @@ BEGIN
       item->>'Venue cluster',
       item->>'Nomenclature',
       COALESCE((item->>'Required')::int, 0),
-      NULLIF(item->>'Estimated bump-in date', '')::date,
+      _safe_date(item->>'Estimated bump-in date'),
       COALESCE((item->>'_manual')::boolean, false),
       COALESCE((item->>'_kit')::boolean, false)
     );
@@ -395,7 +407,7 @@ BEGIN
   IF date_ovr IS NOT NULL THEN
     FOR k, v IN SELECT * FROM jsonb_each(date_ovr) LOOP
       INSERT INTO lm_dispatch (fingerprint, date_override)
-      VALUES (k, (v#>>'{}')::date)
+      VALUES (k, _safe_date(v#>>'{}'))
       ON CONFLICT (fingerprint) DO UPDATE SET date_override = EXCLUDED.date_override;
     END LOOP;
   END IF;
@@ -519,5 +531,7 @@ BEGIN
   RAISE NOTICE '════════════════════════════════════════';
 END $$;
 
--- Clean up helper
+-- Clean up helpers
 DROP FUNCTION IF EXISTS _v1(text);
+DROP FUNCTION IF EXISTS _safe_date(text);
+RESET datestyle;
