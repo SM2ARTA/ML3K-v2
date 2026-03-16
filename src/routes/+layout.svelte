@@ -9,6 +9,7 @@
 	import { restoreUndo, hasUndo } from '$lib/undo';
 	import { startRealtime, stopRealtime } from '$lib/realtime';
 	import { loadAIConfig } from '$lib/hs-utils';
+	import { signOut } from '$lib/auth';
 
 	let { children } = $props();
 	let helpOpen = $state(false);
@@ -80,10 +81,12 @@
 			<div style="display:flex;align-items:center;gap:12px">
 				<div>
 					<div style="font-size:14px;font-weight:700">
-						ML3K <span style="color:var(--ac);font-size:10px">v2</span> <span style="font-size:8px;color:var(--tt);font-weight:400">b0316x</span>
-						<span style="font-size:10px;padding:2px 6px;border-radius:4px;margin-left:4px;{$role === 'admin' ? 'background:var(--as);color:var(--ac)' : 'background:var(--bg);color:var(--ts)'}">
-							{$role === 'admin' ? 'Admin ✕' : 'Viewer'}
-						</span>
+						ML3K <span style="color:var(--ac);font-size:10px">v2</span> <span style="font-size:8px;color:var(--tt);font-weight:400">b0316y</span>
+						<button onclick={async () => { await signOut(); $role = ''; window.location.href = '/'; }}
+							style="font-size:10px;padding:2px 6px;border-radius:4px;margin-left:4px;border:none;cursor:pointer;{$role === 'admin' ? 'background:var(--as);color:var(--ac)' : 'background:var(--bg);color:var(--ts)'}"
+							title="Click to sign out">
+							{$role === 'admin' ? 'Admin ✕' : 'Viewer ✕'}
+						</button>
 						<span class="sb-status" class:connected={$connected} class:checking={!$connected}>
 							<span style="width:6px;height:6px;border-radius:50%;background:currentColor;display:inline-block"></span>
 							{$connected ? (realtimeActive ? 'Live' : 'Connected') : 'Checking...'}

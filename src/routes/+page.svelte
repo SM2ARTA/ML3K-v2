@@ -2,21 +2,40 @@
 	import { role, activeModule, connected } from '$lib/stores';
 	import { getSystemStats } from '$lib/db';
 	import { loadLPFromSharedState } from '$lib/migrate';
+	import { simpleAuth, signIn, signUp, checkAuth } from '$lib/auth';
+	import { onMount } from 'svelte';
 
 	let username = $state('');
 	let password = $state('');
 	let v2Stats = $state<any>(null);
 	let v1Stats = $state<any>(null);
 	let loading = $state(false);
-	let migrationStatus = $state('');
+	let authError = $state('');
+	let authMode = $state<'simple' | 'email'>('simple');
+	let isSignUp = $state(false);
 
-	function login() {
-		if (username.toLowerCase() === 'come' && password.toLowerCase() === 'in') {
-			$role = 'admin';
-			loadDashboard();
-		} else if (username.toLowerCase() === 'viewer') {
-			$role = 'viewer';
-			loadDashboard();
+	onMount(async () => {
+		// Check if already logged in via Supabase session
+		const existingRole = await checkAuth();
+		if (existingRole) { $role = existingRole; loadDashboard(); }
+	});
+
+	async function login() {
+		authError = '';
+		if (authMode === 'simple') {
+			const r = simpleAuth(username, password);
+			if (r) { $role = r; loadDashboard(); }
+			else authError = 'Invalid credentials';
+		} else {
+			if (isSignUp) {
+				const { success, error } = await signUp(username, password);
+				if (success) { authError = ''; isSignUp = false; authError = 'Account created! Please sign in.'; }
+				else authError = error || 'Sign up failed';
+			} else {
+				const { role: r, error } = await signIn(username, password);
+				if (r) { $role = r; loadDashboard(); }
+				else authError = error || 'Invalid credentials';
+			}
 		}
 	}
 
@@ -52,18 +71,46 @@
 
 {#if !$role}
 	<div style="display:flex;align-items:center;justify-content:center;height:100vh;background:var(--bg)">
-		<div style="background:var(--sf);padding:32px;border-radius:12px;border:1px solid var(--bd);box-shadow:0 4px 20px rgba(0,0,0,.08);max-width:360px;width:100%">
-			<div style="text-align:center;margin-bottom:24px">
+		<div style="background:var(--sf);padding:32px;border-radius:12px;border:1px solid var(--bd);box-shadow:0 4px 20px rgba(0,0,0,.08);max-width:380px;width:100%">
+			<div style="text-align:center;margin-bottom:20px">
 				<div style="font-size:24px;font-weight:700">ML3K <span style="color:var(--ac)">v2</span></div>
 				<div style="font-size:11px;color:var(--ts);margin-top:4px">FIFA World Cup 2026 · Logistics Manager</div>
 			</div>
+
+			<!-- Auth mode toggle -->
+			<div style="display:flex;gap:2px;margin-bottom:16px;background:var(--bg);border-radius:6px;padding:2px">
+				<button onclick={() => { authMode = 'simple'; authError = ''; }}
+					style="flex:1;padding:6px;font-size:10px;font-weight:600;border:none;border-radius:4px;cursor:pointer;{authMode === 'simple' ? 'background:var(--sf);color:var(--ac);box-shadow:0 1px 3px rgba(0,0,0,.08)' : 'background:transparent;color:var(--ts)'}">
+					Quick Login
+				</button>
+				<button onclick={() => { authMode = 'email'; authError = ''; }}
+					style="flex:1;padding:6px;font-size:10px;font-weight:600;border:none;border-radius:4px;cursor:pointer;{authMode === 'email' ? 'background:var(--sf);color:var(--ac);box-shadow:0 1px 3px rgba(0,0,0,.08)' : 'background:transparent;color:var(--ts)'}">
+					Email Login
+				</button>
+			</div>
+
 			<div style="display:flex;flex-direction:column;gap:10px">
-				<input bind:value={username} placeholder="Username" onkeydown={(e) => e.key === 'Enter' && login()}
+				<input bind:value={username} placeholder={authMode === 'simple' ? 'Username' : 'Email'} onkeydown={(e) => e.key === 'Enter' && login()}
 					style="padding:10px 14px;border:1px solid var(--bd);border-radius:8px;font-size:13px;font-family:var(--fd);outline:none">
 				<input bind:value={password} type="password" placeholder="Password" onkeydown={(e) => e.key === 'Enter' && login()}
 					style="padding:10px 14px;border:1px solid var(--bd);border-radius:8px;font-size:13px;font-family:var(--fd);outline:none">
-				<button class="mbtn mbtn-primary" onclick={login} style="width:100%;margin-top:4px">Enter</button>
+				<button class="mbtn mbtn-primary" onclick={login} style="width:100%;margin-top:4px">
+					{authMode === 'email' && isSignUp ? 'Create Account' : 'Enter'}
+				</button>
 			</div>
+
+			{#if authError}
+				<div style="margin-top:8px;padding:8px;background:{authError.includes('created') ? 'var(--gs)' : 'var(--rs)'};color:{authError.includes('created') ? 'var(--gn)' : 'var(--rd)'};border-radius:6px;font-size:11px;text-align:center">{authError}</div>
+			{/if}
+
+			{#if authMode === 'email'}
+				<div style="text-align:center;margin-top:10px">
+					<button onclick={() => { isSignUp = !isSignUp; authError = ''; }} style="background:none;border:none;color:var(--ac);font-size:11px;cursor:pointer;text-decoration:underline">
+						{isSignUp ? 'Already have an account? Sign in' : 'Need an account? Sign up'}
+					</button>
+				</div>
+			{/if}
+
 			<div style="text-align:center;margin-top:16px;font-size:10px;color:var(--tt)">
 				©2026 Vladislav Abramov | <span style="font-weight:600">SM²ARTA™</span>
 			</div>
