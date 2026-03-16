@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { getLPDemand, getLPHolds, getLPTruckSummary, getLPPlan, getLPDestinations, getLPTruckDispatch, getLPArrivals, getStockReport, getLPSettings, getLPNomenclature, getLPCustomsOverrides, updateCustomsOverride, toggleHSConfirm, updateTruckDispatch, saveLSR, holdBySource, getLPDemandForHolds, updateLPSettings, updateDestination } from '$lib/db';
 	import { role } from '$lib/stores';
-	import { TabBar, StatBadge, Spinner, SearchInput, FilterDropdown, DestBadge, EditableCell, ConfirmButton, TruckCard, HoldBar, BottomBar, TruckModal } from '$lib/components';
+	import { TabBar, StatBadge, Spinner, SearchInput, FilterDropdown, DestBadge, EditableCell, ConfirmButton, TruckCard, HoldBar, BottomBar, TruckModal, HSLookup } from '$lib/components';
 	import { fmtDate } from '$lib/utils';
 	import { exportLPPlan, exportLPDemand, exportLPArrivals } from '$lib/exports';
 	import { createSvelteTable, type ColumnDef, type SortingState } from '$lib/table.svelte';
@@ -29,6 +29,9 @@
 	let loading = $state(true);
 	let truckModalOpen = $state(false);
 	let selectedTruckId = $state(0);
+	let hsLookupOpen = $state(false);
+	let hsLookupSku = $state('');
+	let hsLookupName = $state('');
 	let activeTab = $state('demand');
 	let globalFilter = $state('');
 	let sorting = $state<SortingState>([]);
@@ -272,6 +275,7 @@
 						<td style={r.hs_confirmed ? 'background:var(--gs)' : ''}>
 							<EditableCell value={r.hs_code || ''} placeholder="0000.00" width="65px" {isAdmin} confirmed={r.hs_confirmed} onsave={(v) => onCustomsChange(r.sku, 'hs_code', v)} />
 							<ConfirmButton confirmed={r.hs_confirmed} visible={!!r.hs_code && isAdmin} ontoggle={() => onHSConfirm(r.sku, r.hs_confirmed)} />
+							{#if isAdmin}<button onclick={() => { hsLookupSku = r.sku; hsLookupName = r.name; hsLookupOpen = true; }} style="cursor:pointer;font-size:11px;border:none;background:none;opacity:.5" title="HS Code Lookup">🔍</button>{/if}
 						</td>
 						<td><EditableCell value={r.country || ''} placeholder="China" width="44px" {isAdmin} onsave={(v) => onCustomsChange(r.sku, 'country', v)} /></td>
 						<td><EditableCell value={r.customs_name || ''} placeholder="Customs desc" width="90px" {isAdmin} onsave={(v) => onCustomsChange(r.sku, 'customs_name', v)} /></td>
@@ -415,6 +419,11 @@
 		<div style="font-size:12px;color:var(--ts)">Coming soon — requires LM dispatch dates for comparison</div>
 	</div>
 {/if}
+
+<!-- HS Code Lookup Modal -->
+<HSLookup bind:open={hsLookupOpen} sku={hsLookupSku} name={hsLookupName}
+	demandData={data} customsOverrides={custOvrMap}
+	onAccept={async () => { rawDemand = await getLPDemand(); custOvrMap = Object.fromEntries(((await getLPCustomsOverrides()) || []).map((c) => [c.sku, c])); }} />
 
 <!-- Truck Detail Modal -->
 <TruckModal bind:open={truckModalOpen} truckId={selectedTruckId} {planRows} {truckDispatch} maxPallets={settings.max_pallets} nomenclature={nomMap} customsOverrides={custOvrMap} />
