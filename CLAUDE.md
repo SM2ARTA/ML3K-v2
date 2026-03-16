@@ -82,20 +82,21 @@ supabase/
 | **Engine settings (collapsible)** | ✅ Done | Plan tab, saves to lp_settings |
 | **Transit times (collapsible)** | ✅ Done | Plan tab, saves to lp_destinations |
 | **File upload (nom, demand, arrivals)** | ✅ Done | `/lp/upload` with auto-detect + batch save |
-| **Container date overrides** | ❌ Not ported | `LP_setContDate()` |
-| **Manual arrivals** | ❌ Not ported | `LP_addArrivalItem()` |
-| **Pallet overrides** | ❌ Not ported | `LP_setPalletOvr()` |
-| **Late tab (cross-module)** | ❌ Not ported | `LP_renderLate()` |
-| **Plan regeneration engine** | ❌ Stub only | `LP_buildLoadPlan()` — uses v1 output from DB |
-| **Nom update (partial re-import)** | ❌ Not ported | `LP_updateNomPrompt()` |
-| **Combined CI modal** | ❌ Not ported | Multi-dest CI export |
+| **Container date overrides** | ✅ Done | Inline date picker in arrivals, orange highlight |
+| **Manual arrivals** | ✅ Done | Add form + delete button in arrivals tab |
+| **Pallet qty editing** | ✅ Done | Inline number input in demand table |
+| **Late tab** | ✅ Done | Items not yet ready, days-until-ready color coding |
+| **Plan regeneration engine** | ✅ Done | Full bin-packing port, 🔄 Regenerate button |
+| **Nom update (partial re-import)** | ✅ Done | `NomUpdateModal.svelte`, preserves overrides |
+| **Combined CI modal** | ✅ Done | 8-dest selection, source filter, aggregate export |
 
 ### LM Module — Last Mile
 | Feature | Status |
 |---|---|
+| Dashboard (venue stats, top venues) | ✅ Done |
+| Demand table (searchable) | ✅ Done |
+| Venues settings cards | ✅ Done |
 | Venue sidebar with clusters | ❌ Not ported |
-| Dashboard view | ❌ Not ported |
-| Demand table | ❌ Not ported |
 | Truck plan view | ❌ Not ported |
 | Dispatch controls | ❌ Not ported |
 | Plan engine | ❌ Not ported |
@@ -116,8 +117,8 @@ supabase/
 | Help dialog | ✅ Done | `HelpDialog.svelte` — full system guide |
 | Bottom support bar | ✅ Done | `BottomBar.svelte` — context-sensitive exports |
 | Backup/Restore buttons | ✅ Done | Header — 💾 Backup, 📂 Restore |
-| Undo system | ❌ Not ported |
-| Real-time multi-admin sync | ❌ Not built |
+| Undo system | ✅ Done | `undo.ts` — snapshot/restore, ↩ Undo button |
+| Real-time multi-admin sync | ❌ Not built (Supabase Realtime ready) |
 | Supabase Auth (replace password) | ❌ Not built |
 
 ## Technical Notes for Next Session
