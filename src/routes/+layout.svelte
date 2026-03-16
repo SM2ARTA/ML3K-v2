@@ -5,9 +5,31 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { HelpDialog } from '$lib/components';
+	import { exportBackup, importBackup } from '$lib/backup';
 
 	let { children } = $props();
 	let helpOpen = $state(false);
+	let backupStatus = $state('');
+
+	async function doBackup() {
+		backupStatus = 'Exporting...';
+		try { await exportBackup(); backupStatus = ''; }
+		catch (e: any) { backupStatus = 'Error: ' + e.message; }
+	}
+
+	async function doRestore(e: Event) {
+		const input = e.target as HTMLInputElement;
+		const f = input.files?.[0];
+		if (!f) return;
+		backupStatus = 'Restoring...';
+		try {
+			const buf = await f.arrayBuffer();
+			const log = await importBackup(buf);
+			backupStatus = log.join(' | ');
+			setTimeout(() => { backupStatus = ''; window.location.reload(); }, 3000);
+		} catch (e: any) { backupStatus = 'Error: ' + e.message; }
+		input.value = '';
+	}
 
 	onMount(async () => {
 		try {
@@ -52,10 +74,20 @@
 					<button class="mod-btn" class:active={$activeModule === 'lp'} onclick={() => switchModule('lp')}>📦 Load Plan</button>
 					<button class="mod-btn" class:active={$activeModule === 'lm'} onclick={() => switchModule('lm')}>🚛 Last Mile</button>
 				</div>
+				<button class="rbtn" onclick={doBackup} style="font-size:10px;padding:4px 8px;background:var(--os);color:var(--or);border-color:#F5D6B8">💾 Backup</button>
+				{#if $role === 'admin'}
+					<label class="rbtn" style="font-size:10px;padding:4px 8px;background:var(--ps);color:var(--pu);border-color:#D4C5FE;cursor:pointer">
+						📂 Restore
+						<input type="file" accept=".xlsx" onchange={doRestore} style="position:absolute;width:1px;height:1px;opacity:0">
+					</label>
+				{/if}
 				<button class="rbtn" onclick={() => helpOpen = true} style="font-size:10px;padding:4px 8px">? Help</button>
 			</div>
 		</header>
 		<HelpDialog bind:open={helpOpen} />
+		{#if backupStatus}
+			<div style="padding:4px 16px;background:var(--os);font-size:10px;color:var(--or);text-align:center">{backupStatus}</div>
+		{/if}
 		<main class="app-body">
 			{@render children()}
 		</main>
