@@ -1,6 +1,6 @@
 <script lang="ts">
 	/** Simple bar chart for dispatch volume — no external chart library needed */
-	let { data }: { data: { date: string; trucks: number; pallets: number; qty: number; dispatched: number }[] } = $props();
+	let { data, onBarClick }: { data: { date: string; trucks: number; pallets: number; qty: number; dispatched: number }[]; onBarClick?: (date: string) => void } = $props();
 
 	let maxPlt = $derived(Math.max(...data.map(d => d.pallets), 1));
 	let chartWidth = $derived(Math.max(data.length * 36, 400));
@@ -23,7 +23,8 @@
 				<!-- Bar -->
 				<rect x={x} y={180 - h} width="24" height={h} rx="2"
 					fill={d.dispatched === d.trucks ? 'var(--gn)' : d.dispatched > 0 ? '#F59E0B' : 'var(--ac)'}
-					opacity="0.7" />
+					opacity="0.7" style={onBarClick ? 'cursor:pointer' : ''}
+					onclick={() => onBarClick?.(d.date)} />
 				<!-- Dispatched portion -->
 				{#if dispH > 0 && dispH < h}
 					<rect x={x} y={180 - dispH} width="24" height={dispH} rx="0"

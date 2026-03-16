@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { getLPDemand, getLPHolds, getLPTruckSummary, getLPPlan, getLPDestinations, getLPTruckDispatch, getLPArrivals, getStockReport, getLPSettings, getLPNomenclature, getLPCustomsOverrides, updateCustomsOverride, toggleHSConfirm, updateTruckDispatch, saveLSR, holdBySource, getLPDemandForHolds, updateLPSettings, updateDestination, upsertContainerOverride, getContainerOverrides, addManualArrival, deleteArrival, upsertPalletOverride } from '$lib/db';
+	import { getLPDemand, getLPHolds, getLPTruckSummary, getLPPlan, getLPDestinations, getLPTruckDispatch, getLPArrivals, getStockReport, getLPSettings, getLPNomenclature, getLPCustomsOverrides, updateCustomsOverride, toggleHSConfirm, updateTruckDispatch, saveLSR, holdBySource, getLPDemandForHolds, updateLPSettings, updateDestination, upsertContainerOverride, getContainerOverrides, addManualArrival, deleteArrival, upsertPalletOverride, getArrivedContainers, toggleContainerArrived } from '$lib/db';
 	import { role } from '$lib/stores';
 	import { supabase } from '$lib/supabase';
 	import { TabBar, StatBadge, Spinner, SearchInput, FilterDropdown, DestBadge, EditableCell, ConfirmButton, TruckCard, HoldBar, BottomBar, TruckModal, HSLookup, CombinedCIModal, NomUpdateModal } from '$lib/components';
@@ -30,6 +30,7 @@
 	let nomMap = $state<Record<string, any>>({});
 	let custOvrMap = $state<Record<string, any>>({});
 	let contOverrides = $state<Record<string, string>>({});
+	let arrivedConts = $state<Set<string>>(new Set());
 	let showAddArrival = $state(false);
 	let newArrival = $state({ sku: '', name: '', container: '', qty: 0, arrival_date: '', ready_date: '' });
 	let loading = $state(true);
@@ -172,6 +173,7 @@
 		custOvrMap = Object.fromEntries((custOvr || []).map((c: any) => [c.sku, c]));
 		const co = await getContainerOverrides();
 		contOverrides = Object.fromEntries(co.map((c: any) => [c.container, c.override_date]));
+		arrivedConts = await getArrivedContainers();
 		loading = false;
 	});
 
@@ -234,6 +236,15 @@
 		if (!isAdmin) return;
 		await deleteArrival(id);
 		arrivals = await getLPArrivals();
+	}
+
+	async function handleToggleArrived(containerKey: string) {
+		if (!isAdmin || !containerKey) return;
+		const isArrived = arrivedConts.has(containerKey);
+		await toggleContainerArrived(containerKey, !isArrived);
+		const newSet = new Set(arrivedConts);
+		if (isArrived) newSet.delete(containerKey); else newSet.add(containerKey);
+		arrivedConts = newSet;
 	}
 
 	let regenerating = $state(false);
@@ -521,6 +532,7 @@
 	<!-- Arrivals Tab -->
 	<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
 		<StatBadge label="{arrivals.length} arrival items" />
+		<StatBadge label="{arrivedConts.size} arrived" variant="green" />
 		<StatBadge label="{arrivals.filter(a => a.is_manual).length} manual" variant="purple" />
 		<StatBadge label="{Object.keys(contOverrides).length} date overrides" variant="orange" />
 		{#if isAdmin}
@@ -556,14 +568,25 @@
 		<table class="dtb">
 			<thead style="position:sticky;top:0;background:var(--sf);z-index:10">
 				<tr>
-					<th>SKU</th><th>Name</th><th>Container</th><th>Qty</th>
+					<th style="width:28px"></th><th>SKU</th><th>Name</th><th>Container</th><th>Qty</th>
 					<th>Arrival Date</th><th>Ready Date</th><th>Pallets</th><th></th>
 				</tr>
 			</thead>
 			<tbody>
 				{#each arrivals as a}
 					{@const hasOverride = a.container && contOverrides[a.container]}
-					<tr style={a.is_manual ? 'background:var(--ps)' : hasOverride ? 'background:var(--os)' : ''}>
+					{@const isArrived = a.container ? arrivedConts.has(a.container) : false}
+					<tr style={isArrived ? 'background:var(--gs)' : a.is_manual ? 'background:var(--ps)' : hasOverride ? 'background:var(--os)' : ''}>
+						<td style="text-align:center;padding:2px">
+							{#if a.container && isAdmin}
+								<input type="checkbox" checked={isArrived}
+									onchange={() => handleToggleArrived(a.container)}
+									style="accent-color:var(--gn);width:14px;height:14px;cursor:pointer"
+									title={isArrived ? 'Mark as not arrived' : 'Mark as arrived'}>
+							{:else if a.container && isArrived}
+								<span style="color:var(--gn);font-size:12px">&#10003;</span>
+							{/if}
+						</td>
 						<td class="mono" style="font-weight:600">{a.sku}</td>
 						<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{a.name || '—'}</td>
 						<td class="mono" style="font-size:10px">{a.container || '—'}</td>

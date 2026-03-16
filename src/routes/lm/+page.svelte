@@ -63,6 +63,8 @@
 	let showTruckModal = $state(false);
 	let modalTruck = $state<any>(null);
 	let modalDay = $state<any>(null);
+	let showNoPalletModal = $state(false);
+	let showNoBIModal = $state(false);
 
 	const lmTabs = [
 		{ id: 'dashboard', label: '📊 Dashboard' },
@@ -198,6 +200,13 @@
 	let totalVenues = $derived(filteredVenues.length);
 	let totalQty = $derived(filteredVenues.reduce((s, v) => s + v.qty, 0));
 	let totalPlt = $derived(filteredVenues.reduce((s, v) => s + v.pallets, 0));
+
+	// Warning badges: items missing pallet data or bump-in dates
+	let noPalletItems = $derived(demand.filter(d => {
+		const nom = nomMap[d.sku];
+		return !nom || !nom.pallet_qty || nom.pallet_qty <= 0;
+	}));
+	let noBumpInItems = $derived(demand.filter(d => !d.bump_in_date));
 
 	// ── Truck fingerprint (content-based ID) ──
 	function truckFP(venue: string, biDate: string, truckIdx: number, items: any[]): string {
@@ -496,6 +505,23 @@
 						<div style="font-size:20px;font-weight:700">{filteredClusters.length}</div>
 					</Card>
 				</div>
+
+				{#if noPalletItems.length > 0 || noBumpInItems.length > 0}
+					<div style="display:flex;gap:8px;margin-bottom:10px">
+						{#if noPalletItems.length > 0}
+							<button class="rbtn" style="background:var(--os);color:var(--or);border-color:#F5D6B8;font-size:10px"
+								onclick={() => { showNoPalletModal = true }}>
+								{noPalletItems.length} items missing pallet data
+							</button>
+						{/if}
+						{#if noBumpInItems.length > 0}
+							<button class="rbtn" style="background:var(--rs);color:var(--rd);border-color:#F5B8BA;font-size:10px"
+								onclick={() => { showNoBIModal = true }}>
+								{noBumpInItems.length} items missing bump-in date
+							</button>
+						{/if}
+					</div>
+				{/if}
 
 				{#if isAdmin}
 					<div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
@@ -974,6 +1000,47 @@
 			</div>
 		</Modal>
 	{/if}
+
+	<!-- No Pallet Data Modal -->
+	<Modal title="Items Missing Pallet Data" subtitle="{noPalletItems.length} items" bind:open={showNoPalletModal} maxWidth="600px">
+		<div style="overflow-y:auto;max-height:400px;border:1px solid var(--bd);border-radius:var(--r)">
+			<table class="dtb">
+				<thead style="position:sticky;top:0;background:var(--sf)">
+					<tr><th>SKU</th><th>Name</th><th>Venue</th></tr>
+				</thead>
+				<tbody>
+					{#each noPalletItems as item}
+						<tr>
+							<td class="mono" style="font-weight:600;font-size:10px">{item.sku}</td>
+							<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px">{nomMap[item.sku]?.name || item.sku}</td>
+							<td style="font-size:10px;color:var(--ts)">{item.venue || '—'}</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		</div>
+	</Modal>
+
+	<!-- No Bump-in Date Modal -->
+	<Modal title="Items Missing Bump-in Date" subtitle="{noBumpInItems.length} items" bind:open={showNoBIModal} maxWidth="600px">
+		<div style="overflow-y:auto;max-height:400px;border:1px solid var(--bd);border-radius:var(--r)">
+			<table class="dtb">
+				<thead style="position:sticky;top:0;background:var(--sf)">
+					<tr><th>Venue</th><th>SKU</th><th>Name</th><th>Qty</th></tr>
+				</thead>
+				<tbody>
+					{#each noBumpInItems as item}
+						<tr>
+							<td style="font-size:10px;color:var(--ts)">{item.venue || '—'}</td>
+							<td class="mono" style="font-weight:600;font-size:10px">{item.sku}</td>
+							<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px">{nomMap[item.sku]?.name || item.sku}</td>
+							<td class="mono fw7" style="font-size:11px">{(item.required_qty || 0).toLocaleString()}</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		</div>
+	</Modal>
 {/if}
 
 <!-- Mobile bottom nav -->

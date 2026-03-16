@@ -156,6 +156,20 @@ export async function deleteArrival(id: number) {
 	await supabase.from('lp_arrivals').delete().eq('id', id);
 }
 
+// Arrived containers
+export async function getArrivedContainers(): Promise<Set<string>> {
+	const { data } = await supabase.from('lp_arrived_containers').select('container_key');
+	return new Set((data || []).map((r: any) => r.container_key));
+}
+
+export async function toggleContainerArrived(containerKey: string, arrived: boolean) {
+	if (arrived) {
+		await supabase.from('lp_arrived_containers').upsert({ container_key: containerKey }, { onConflict: 'container_key' });
+	} else {
+		await supabase.from('lp_arrived_containers').delete().eq('container_key', containerKey);
+	}
+}
+
 export async function updateTruckDispatch(truckId: number, fields: Record<string, any>) {
 	const { error } = await supabase
 		.from('lp_truck_dispatch')
