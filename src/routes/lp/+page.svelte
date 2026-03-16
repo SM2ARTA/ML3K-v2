@@ -24,29 +24,18 @@
 	let allDestinations = $derived([...new Set(demand.map(d => d.destination).filter(Boolean))].sort());
 	let holdSet = $derived(new Set(holds.map(h => `${h.destination}|${h.sku}`)));
 
-	// Aggregate demand by SKU
+	// Data is already aggregated by SKU from the RPC function
 	let skuRows = $derived.by(() => {
-		const map = new Map<string, any>();
-		for (const d of demand) {
-			if (!map.has(d.sku)) {
-				map.set(d.sku, {
-					sku: d.sku, name: d.name || '', source: d.source || '',
-					totalQty: 0, totalPallets: 0,
-					hs_code: d.hs_code || '', country: d.country || '',
-					unit_price: d.unit_price || 0, customs_name: d.customs_name || '',
-					hs_confirmed: d.hs_confirmed || false,
-					pallet_qty: d.pallet_qty || 0, pallet_spc: d.pallet_spc || 0,
-					dests: {} as Record<string, number>
-				});
-			}
-			const row = map.get(d.sku)!;
-			row.totalQty += d.required_qty || 0;
-			const pq = d.pallet_qty || 0;
-			const ps = d.pallet_spc || 0;
-			if (pq > 0) row.totalPallets += ((d.required_qty || 0) / pq) * ps;
-			row.dests[d.destination] = (row.dests[d.destination] || 0) + (d.required_qty || 0);
-		}
-		return [...map.values()].sort((a, b) => a.sku.localeCompare(b.sku));
+		return demand.map(d => ({
+			sku: d.sku, name: d.name || '', source: d.source || '',
+			totalQty: d.total_qty || 0,
+			hs_code: d.hs_code || '', country: d.country || '',
+			unit_price: d.unit_price || 0, customs_name: d.customs_name || '',
+			hs_confirmed: d.hs_confirmed || false,
+			pallet_qty: d.pallet_qty || 0, pallet_spc: d.pallet_spc || 0,
+			totalPallets: (d.pallet_qty > 0 ? (d.total_qty / d.pallet_qty) * (d.pallet_spc || 0) : 0),
+			dests: d.destinations || {}
+		}));
 	});
 
 	// Filtered rows

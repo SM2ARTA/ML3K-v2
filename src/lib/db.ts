@@ -17,18 +17,15 @@ export async function getLPNomenclature() {
 }
 
 export async function getLPDemand() {
-	// Demand can have 24k+ rows — fetch all with pagination
-	const all: any[] = [];
-	let from = 0;
-	const pageSize = 5000;
-	while (true) {
-		const { data } = await supabase.from('v_lp_demand').select('*').range(from, from + pageSize - 1);
-		if (!data || data.length === 0) break;
-		all.push(...data);
-		if (data.length < pageSize) break;
-		from += pageSize;
+	// Use server-side aggregation — returns ~658 SKU rows instead of 24k demand rows
+	const { data, error } = await supabase.rpc('get_lp_demand_by_sku');
+	if (error) {
+		console.warn('RPC error, falling back to view:', error);
+		// Fallback to view (capped at 1000 rows)
+		const { data: fallback } = await supabase.from('v_lp_demand').select('*');
+		return fallback || [];
 	}
-	return all;
+	return data || [];
 }
 
 export async function getLPDemandRaw() {
