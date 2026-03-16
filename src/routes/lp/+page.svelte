@@ -557,55 +557,71 @@
 	{@const arrTotalPlt = arrivals.reduce((s, a) => s + (a.avail_pallets || 0), 0)}
 	{@const arrEarliestReady = arrivals.filter(a => a.ready_date).map(a => a.ready_date).sort()[0] || ''}
 
+	{@const localDeliveries = arrivals.filter(a => (a.container || '').startsWith('Local-') || a.container === 'MANUAL').length > 0 ? new Set(arrivals.filter(a => (a.container || '').startsWith('Local-') || a.container === 'MANUAL').map(a => a.container)).size : 0}
+	{@const manualCount = arrivals.filter(a => a.is_manual).length}
+	{@const overrideCount = Object.keys(contOverrides).length}
+
 	<!-- KPI Cards -->
-	<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin-bottom:10px">
+	<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;margin-bottom:10px">
 		<div class="card" style="padding:8px 10px;text-align:center">
-			<div style="font-size:8px;color:var(--ts);font-weight:600;text-transform:uppercase">CONTAINERS</div>
-			<div style="font-size:16px;font-weight:700;color:var(--ac)">{arrContainers.size}</div>
+			<div style="font-size:22px;font-weight:700;color:var(--ac)">{arrContainers.size}</div>
+			<div style="font-size:8px;color:var(--ts);font-weight:600">Containers</div>
 		</div>
-		<div class="card" style="padding:8px 10px;text-align:center">
-			<div style="font-size:8px;color:var(--ts);font-weight:600;text-transform:uppercase">ARRIVED</div>
-			<div style="font-size:16px;font-weight:700;color:var(--gn)">{arrivedConts.size}<span style="font-size:10px;color:var(--tt)">/{arrContainers.size}</span></div>
-		</div>
-		<div class="card" style="padding:8px 10px;text-align:center">
-			<div style="font-size:8px;color:var(--ts);font-weight:600;text-transform:uppercase">SKU LINES</div>
-			<div style="font-size:16px;font-weight:700">{arrivals.length}</div>
-		</div>
-		<div class="card" style="padding:8px 10px;text-align:center">
-			<div style="font-size:8px;color:var(--ts);font-weight:600;text-transform:uppercase">PIECES</div>
-			<div style="font-size:16px;font-weight:700">{arrTotalQty.toLocaleString()}</div>
-		</div>
-		<div class="card" style="padding:8px 10px;text-align:center">
-			<div style="font-size:8px;color:var(--ts);font-weight:600;text-transform:uppercase">PALLETS</div>
-			<div style="font-size:16px;font-weight:700;color:var(--pu)">{arrTotalPlt.toFixed(1)}</div>
-		</div>
-		<div class="card" style="padding:8px 10px;text-align:center">
-			<div style="font-size:8px;color:var(--ts);font-weight:600;text-transform:uppercase">DATES</div>
-			<div style="font-size:16px;font-weight:700">{arrDates.size}</div>
-		</div>
-		<div class="card" style="padding:8px 10px;text-align:center">
-			<div style="font-size:8px;color:var(--ts);font-weight:600;text-transform:uppercase">TURNAROUND</div>
-			<div style="font-size:16px;font-weight:700">{settings?.turnaround || 6}d</div>
-		</div>
-		{#if arrEarliestReady}
+		{#if localDeliveries > 0}
 			<div class="card" style="padding:8px 10px;text-align:center">
-				<div style="font-size:8px;color:var(--ts);font-weight:600;text-transform:uppercase">EARLIEST READY</div>
-				<div style="font-size:12px;font-weight:700;font-family:var(--fm)">{arrEarliestReady}</div>
+				<div style="font-size:22px;font-weight:700;color:var(--or)">{localDeliveries}</div>
+				<div style="font-size:8px;color:var(--ts);font-weight:600">Local Deliveries</div>
+			</div>
+		{/if}
+		<div class="card" style="padding:8px 10px;text-align:center">
+			<div style="font-size:22px;font-weight:700;color:var(--gn)">{arrivedConts.size}<span style="font-size:12px;color:var(--tt)">/{arrContainers.size}</span></div>
+			<div style="font-size:8px;color:var(--ts);font-weight:600">Arrived</div>
+		</div>
+		<div class="card" style="padding:8px 10px;text-align:center">
+			<div style="font-size:22px;font-weight:700">{arrDates.size}</div>
+			<div style="font-size:8px;color:var(--ts);font-weight:600">Arrival Dates</div>
+		</div>
+		<div class="card" style="padding:8px 10px;text-align:center">
+			<div style="font-size:22px;font-weight:700;color:var(--pu)">{arrTotalPlt.toFixed(0)}</div>
+			<div style="font-size:8px;color:var(--ts);font-weight:600">Pallets</div>
+		</div>
+		<div class="card" style="padding:8px 10px;text-align:center">
+			<div style="font-size:22px;font-weight:700">{arrTotalQty.toLocaleString()}</div>
+			<div style="font-size:8px;color:var(--ts);font-weight:600">Pieces</div>
+		</div>
+		<div class="card" style="padding:8px 10px;text-align:center">
+			<div style="font-size:22px;font-weight:700">{arrivals.length}</div>
+			<div style="font-size:8px;color:var(--ts);font-weight:600">SKU Lines</div>
+		</div>
+		{#if manualCount > 0}
+			<div class="card" style="padding:8px 10px;text-align:center">
+				<div style="font-size:22px;font-weight:700;color:var(--pu)">{manualCount}</div>
+				<div style="font-size:8px;color:var(--ts);font-weight:600">Manual Items</div>
+			</div>
+		{/if}
+		<div class="card" style="padding:8px 10px;text-align:center">
+			<div style="font-size:22px;font-weight:700">{settings?.turnaround || 6}d</div>
+			<div style="font-size:8px;color:var(--ts);font-weight:600">WH Turnaround</div>
+		</div>
+		<div class="card" style="padding:8px 10px;text-align:center">
+			<div style="font-size:16px;font-weight:700;font-family:var(--fm)">{arrEarliestReady || '—'}</div>
+			<div style="font-size:8px;color:var(--ts);font-weight:600">Earliest Ready</div>
+		</div>
+		{#if overrideCount > 0}
+			<div class="card" style="padding:8px 10px;text-align:center">
+				<div style="font-size:22px;font-weight:700;color:var(--pu)">{overrideCount}</div>
+				<div style="font-size:8px;color:var(--ts);font-weight:600">Date Overrides</div>
 			</div>
 		{/if}
 	</div>
 
-	<!-- Toolbar -->
-	<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
-		<StatBadge label="{arrivals.filter(a => a.is_manual).length} manual" variant="purple" />
-		{#if Object.keys(contOverrides).length > 0}
-			<StatBadge label="{Object.keys(contOverrides).length} date overrides" variant="orange" />
-		{/if}
-		<input type="text" bind:value={arrivalSearch} placeholder="Search container, SKU..."
-			style="padding:5px 8px;border:1px solid var(--bd);border-radius:4px;font-size:10px;outline:none;width:180px">
+	<!-- Search + Add -->
+	<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+		<input type="text" bind:value={arrivalSearch} placeholder="Search container number..."
+			style="flex:1;padding:7px 12px;border:1px solid var(--bd);border-radius:6px;font-size:11px;outline:none">
 		{#if isAdmin}
-			<button class="rbtn" onclick={() => showAddArrival = !showAddArrival} style="font-size:10px;padding:3px 8px;background:var(--gs);color:var(--gn);border-color:#B8DFCA">
-				{showAddArrival ? '✕ Cancel' : '+ Add Manual'}
+			<button class="rbtn" onclick={() => showAddArrival = !showAddArrival} style="font-size:10px;padding:5px 12px;background:var(--gs);color:var(--gn);border-color:#B8DFCA">
+				{showAddArrival ? '✕ Cancel' : '+ Add Item'}
 			</button>
 		{/if}
 	</div>
@@ -634,58 +650,88 @@
 		</div>
 	{/if}
 
-	<div style="overflow-x:auto;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);max-height:calc(100vh - {showAddArrival ? '360' : '200'}px);overflow-y:auto">
-		<table class="dtb">
-			<thead style="position:sticky;top:0;background:var(--sf);z-index:10">
-				<tr>
-					<th style="width:28px"></th><th>SKU</th><th>Name</th><th>Container</th><th>Qty</th>
-					<th>Arrival Date</th><th>Ready Date</th><th>Pallets</th><th></th>
-				</tr>
-			</thead>
-			<tbody>
-				{#each filteredArrivals as a}
-					{@const hasOverride = a.container && contOverrides[a.container]}
-					{@const isArrived = a.container ? arrivedConts.has(a.container) : false}
-					<tr style={isArrived ? 'background:var(--gs)' : a.is_manual ? 'background:var(--ps)' : hasOverride ? 'background:var(--os)' : ''}>
-						<td style="text-align:center;padding:2px">
-							{#if a.container && isAdmin}
-								<input type="checkbox" checked={isArrived}
-									onchange={() => handleToggleArrived(a.container)}
-									style="accent-color:var(--gn);width:14px;height:14px;cursor:pointer"
-									title={isArrived ? 'Mark as not arrived' : 'Mark as arrived'}>
-							{:else if a.container && isArrived}
-								<span style="color:var(--gn);font-size:12px">&#10003;</span>
+	<!-- Container Card Grid -->
+	{@const PALETTE = ['#E57373','#64B5F6','#81C784','#FFB74D','#BA68C8','#4DB6AC','#FF8A65','#7986CB','#A1887F','#90A4AE']}
+	{@const contGroups = (() => {
+		const m = new Map<string, { container: string; items: any[]; totalPlt: number; totalQty: number; skus: Set<string>; arrDate: string; readyDate: string; isLocal: boolean }>();
+		for (const a of filteredArrivals) {
+			const cid = a.container || '—';
+			if (!m.has(cid)) m.set(cid, { container: cid, items: [], totalPlt: 0, totalQty: 0, skus: new Set(), arrDate: a.arrival_date || '', readyDate: a.ready_date || '', isLocal: cid.startsWith('Local-') || cid === 'MANUAL' });
+			const g = m.get(cid)!;
+			g.items.push(a);
+			g.totalPlt += a.avail_pallets || 0;
+			g.totalQty += a.qty || 0;
+			g.skus.add(a.sku);
+			if (a.arrival_date && (!g.arrDate || a.arrival_date < g.arrDate)) g.arrDate = a.arrival_date;
+			if (a.ready_date && (!g.readyDate || a.ready_date > g.readyDate)) g.readyDate = a.ready_date;
+		}
+		return [...m.values()].sort((a, b) => (a.arrDate || '9999').localeCompare(b.arrDate || '9999'));
+	})()}
+	{@const localCount = contGroups.filter(g => g.isLocal).length}
+
+	<div style="overflow-y:auto;max-height:calc(100vh - {showAddArrival ? '440' : '280'}px)">
+		<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px">
+			{#each contGroups as g, gi}
+				{@const color = PALETTE[gi % PALETTE.length]}
+				{@const hasOverride = contOverrides[g.container]}
+				{@const isArrived = arrivedConts.has(g.container)}
+				{@const pctFull = g.totalPlt > 0 ? Math.min(100, (g.totalPlt / 26) * 100) : 0}
+				<div style="background:var(--sf);border:1.5px solid {hasOverride ? 'var(--pu)' : isArrived ? 'var(--gn)' : color + '44'};border-radius:var(--r);padding:10px;{hasOverride ? 'box-shadow:0 0 0 1px var(--pu)' : ''}{isArrived ? 'opacity:.75' : ''}">
+					<!-- Header -->
+					<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+						<span style="width:8px;height:8px;border-radius:50%;background:{color};flex-shrink:0"></span>
+						<span style="font-size:11px;font-weight:700;color:{color};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{g.isLocal ? '🚚 ' : ''}{g.container}</span>
+					</div>
+					<!-- Dates -->
+					<div style="font-size:10px;color:var(--ts);margin-bottom:2px">📅 {g.arrDate || '—'}</div>
+					<div style="font-size:10px;color:var(--ts);margin-bottom:6px">✅ Ready: {g.readyDate || '—'} <span style="color:var(--tt)">(+{settings?.turnaround || 6}d)</span></div>
+					<!-- Date override -->
+					{#if isAdmin && g.container !== '—'}
+						<div style="display:flex;align-items:center;gap:4px;margin-bottom:6px">
+							<input type="date" value={hasOverride || g.arrDate || ''}
+								onchange={(e) => handleContainerOverride(g.container, (e.target as HTMLInputElement).value)}
+								style="font-size:10px;font-family:var(--fm);padding:2px 4px;border:1px solid {hasOverride ? 'var(--pu)' : 'var(--bd)'};border-radius:4px;outline:none;flex:1;background:{hasOverride ? 'var(--ps)' : 'var(--sf)'}">
+							{#if hasOverride}
+								<button onclick={() => { handleContainerOverride(g.container, ''); delete contOverrides[g.container]; contOverrides = {...contOverrides}; }}
+									style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--rd)" title="Reset to original">✕</button>
 							{/if}
-						</td>
-						<td class="mono" style="font-weight:600">{a.sku}</td>
-						<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{a.name || '—'}</td>
-						<td class="mono" style="font-size:10px">{a.container || '—'}</td>
-						<td class="mono fw7">{(a.qty || 0).toLocaleString()}</td>
-						<td class="mono">
-							{#if isAdmin && a.container}
-								<input type="date" value={contOverrides[a.container] || a.arrival_date || ''}
-									onchange={(e) => handleContainerOverride(a.container, e.currentTarget.value)}
-									style="font-size:10px;font-family:var(--fm);padding:2px 4px;border:1px solid {hasOverride ? 'var(--or)' : 'var(--bd)'};border-radius:4px;outline:none;width:110px;background:{hasOverride ? 'var(--os)' : 'var(--sf)'}">
-							{:else}
-								{hasOverride ? contOverrides[a.container] : a.arrival_date || '—'}
-							{/if}
-						</td>
-						<td class="mono">{a.ready_date || '—'}</td>
-						<td class="mono">{a.avail_pallets ? a.avail_pallets.toFixed(1) : '—'}</td>
-						<td>
-							{#if a.is_manual}
-								<span style="font-size:9px;color:var(--pu);background:var(--ps);padding:1px 4px;border-radius:3px">✏️ manual</span>
-								{#if isAdmin}
-									<button onclick={() => handleDeleteArrival(a.id)} style="background:none;border:none;cursor:pointer;color:var(--rd);font-size:12px;margin-left:4px" title="Delete">✕</button>
-								{/if}
-							{:else if hasOverride}
-								<span style="font-size:9px;color:var(--or)">📅 override</span>
-							{/if}
-						</td>
-					</tr>
-				{/each}
-			</tbody>
-		</table>
+						</div>
+						{#if hasOverride}
+							<div style="font-size:9px;color:var(--pu);margin-bottom:4px;text-decoration:line-through">{g.arrDate}</div>
+						{/if}
+					{/if}
+					<!-- Stats -->
+					<div style="display:flex;gap:0;margin-bottom:4px">
+						<div style="flex:1;text-align:center;padding:4px 2px;background:var(--bg);border-radius:4px 0 0 4px">
+							<div style="font-size:14px;font-weight:700;color:var(--pu)">{g.totalPlt.toFixed(1)}</div>
+							<div style="font-size:8px;color:var(--tt)">plt</div>
+						</div>
+						<div style="flex:1;text-align:center;padding:4px 2px;background:var(--bg)">
+							<div style="font-size:14px;font-weight:700">{g.totalQty.toLocaleString()}</div>
+							<div style="font-size:8px;color:var(--tt)">pcs</div>
+						</div>
+						<div style="flex:1;text-align:center;padding:4px 2px;background:var(--bg);border-radius:0 4px 4px 0">
+							<div style="font-size:14px;font-weight:700">{g.skus.size}</div>
+							<div style="font-size:8px;color:var(--tt)">SKUs</div>
+						</div>
+					</div>
+					<!-- Progress bar -->
+					<div style="height:4px;background:var(--bg);border-radius:2px;overflow:hidden;margin-bottom:6px">
+						<div style="height:100%;width:{pctFull}%;background:{isArrived ? 'var(--gn)' : color};border-radius:2px;transition:width .2s"></div>
+					</div>
+					<!-- Mark arrived -->
+					<label style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--ts);cursor:{isAdmin ? 'pointer' : 'default'}">
+						{#if isAdmin && g.container !== '—'}
+							<input type="checkbox" checked={isArrived} onchange={() => handleToggleArrived(g.container)}
+								style="accent-color:var(--gn);width:13px;height:13px">
+						{:else if isArrived}
+							<span style="color:var(--gn)">✓</span>
+						{/if}
+						Mark arrived
+					</label>
+				</div>
+			{/each}
+		</div>
 	</div>
 
 {:else if activeTab === 'late'}
