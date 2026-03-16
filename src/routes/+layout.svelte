@@ -6,10 +6,21 @@
 	import { goto } from '$app/navigation';
 	import { HelpDialog } from '$lib/components';
 	import { exportBackup, importBackup } from '$lib/backup';
+	import { restoreUndo, hasUndo } from '$lib/undo';
 
 	let { children } = $props();
 	let helpOpen = $state(false);
 	let backupStatus = $state('');
+	let undoAvailable = $state(false);
+
+	async function doUndo() {
+		const ok = await restoreUndo();
+		undoAvailable = hasUndo();
+		if (ok) window.location.reload();
+	}
+
+	// Check undo availability periodically
+	$effect(() => { undoAvailable = hasUndo(); });
 
 	async function doBackup() {
 		backupStatus = 'Exporting...';
@@ -57,7 +68,7 @@
 			<div style="display:flex;align-items:center;gap:12px">
 				<div>
 					<div style="font-size:14px;font-weight:700">
-						ML3K <span style="color:var(--ac);font-size:10px">v2</span> <span style="font-size:8px;color:var(--tt);font-weight:400">b0316r</span>
+						ML3K <span style="color:var(--ac);font-size:10px">v2</span> <span style="font-size:8px;color:var(--tt);font-weight:400">b0316s</span>
 						<span style="font-size:10px;padding:2px 6px;border-radius:4px;margin-left:4px;{$role === 'admin' ? 'background:var(--as);color:var(--ac)' : 'background:var(--bg);color:var(--ts)'}">
 							{$role === 'admin' ? 'Admin ✕' : 'Viewer'}
 						</span>
@@ -81,6 +92,8 @@
 						<input type="file" accept=".xlsx" onchange={doRestore} style="position:absolute;width:1px;height:1px;opacity:0">
 					</label>
 				{/if}
+				<button class="rbtn" onclick={doUndo} disabled={!undoAvailable}
+					style="font-size:10px;padding:4px 8px;opacity:{undoAvailable ? 1 : 0.3}" title="Undo last action">↩ Undo</button>
 				<button class="rbtn" onclick={() => helpOpen = true} style="font-size:10px;padding:4px 8px">? Help</button>
 			</div>
 		</header>
