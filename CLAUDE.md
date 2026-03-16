@@ -1,77 +1,220 @@
 # ML3K v2 — FIFA World Cup 2026 Logistics Manager
 
 ## Project Overview
-SvelteKit rebuild of ML3K (formerly single-file `index.html`). Ground transport logistics for FWC26 across USA, Canada, and Mexico.
+SvelteKit rebuild of ML3K. Ground transport logistics for FWC26 — trucks, stadiums, venues, routes, and staffing across USA, Canada, and Mexico host cities.
 
 ## Architecture
 - **Framework**: SvelteKit with TypeScript
-- **Backend**: Supabase (PostgreSQL + Realtime)
-- **Hosting**: TBD (Vercel recommended)
+- **Backend**: Supabase PostgreSQL with proper normalized tables (30 tables + 2 views)
+- **Hosting**: Vercel at `ml3k.smmarta.com` (auto-deploys from GitHub)
 - **Build**: Vite
-- **Original app**: Still running at `SM2ARTA/LM-3000` — this project runs in parallel
+- **v1 app**: Still running at `SM2ARTA/LM-3000` (single `index.html`, ~11,000 lines) — shares same Supabase project
 
-## Migration Strategy
-- **Phase 1** (current): Read from `shared_state` JSON blobs via `migrate.ts` bridge
-- **Phase 2**: Create proper database tables, write migration scripts
-- **Phase 3**: Full feature parity with v1, switch users over
-- **Phase 4**: Deprecate v1, remove `shared_state` dependency
+## Migration Status
+- **Phase 1** ✅: `shared_state` bridge via `migrate.ts`
+- **Phase 2** ✅: Proper database tables created + data migrated via `002_migrate_data.sql`
+- **Phase 3** (current): Building v2 UI with proper table reads/writes via `db.ts`
+- **Phase 4**: Full feature parity, switch users, deprecate v1
 
 ## Supabase
 - Project URL: `https://stwopndhnxcjyomkufii.supabase.co`
-- Anon key in `.env` (public, safe to keep)
-- Currently shares the same Supabase project as v1 — reads from `shared_state` table
-- Future: proper tables (nomenclature, material_plan, trucks, customs_overrides, etc.)
+- Anon key in `.env` (public, safe)
+- **v1 table**: `shared_state` (JSON blobs — DO NOT MODIFY, v1 still uses it)
+- **v2 tables**: 30 normalized tables with indexes, triggers, RLS (see Database Schema below)
+- **Disk IO**: v1 had budget issues from writing 6 giant JSON blobs per edit. v2 solves this with row-level writes.
 
 ## Project Structure
 ```
 src/
 ├── lib/
-│   ├── supabase.ts      — Supabase client init
-│   ├── stores.ts        — Svelte stores (role, module, LP/LM state)
-│   ├── migrate.ts       — Bridge: reads v1 shared_state data
-│   └── index.ts         — Library exports
+│   ├── supabase.ts      — Supabase client (reads from .env)
+│   ├── db.ts             — v2 database access layer (reads/writes proper tables)
+│   ├── stores.ts         — Svelte stores (role, module, LP/LM state)
+│   ├── migrate.ts        — Bridge: reads v1 shared_state (Phase 1, will be removed)
+│   └── index.ts          — Library exports
 ├── routes/
-│   ├── +layout.svelte   — App shell (header, module switcher, auth gate)
-│   └── +page.svelte     — Login + migration dashboard
-├── app.css              — Design tokens (matches v1)
-└── app.html             — HTML template with Google Fonts
+│   ├── +layout.svelte    — App shell (header, module switcher, auth gate)
+│   └── +page.svelte      — Login + dashboard with v1/v2 comparison
+├── app.css               — Design tokens (matches v1)
+└── app.html              — HTML template with Google Fonts
+supabase/
+├── 001_initial_schema.sql — 30 tables, views, triggers, RLS
+└── 002_migrate_data.sql   — Data migration from shared_state to proper tables
 ```
 
-## Design Tokens
-Same as v1 — defined in `app.css`:
-- `--ac` (#CF5D5D) accent red, `--gn` (#12804A) green, `--pu` (#6E3FF3) purple
-- `--fd` DM Sans, `--fm` IBM Plex Mono
-- Button classes: `.rbtn` (toolbar), `.mbtn` (modal)
-
 ## Three Modules
-- **Vision 2026** (`v26`): Unified command view
-- **Load Plan** (`lp`): Warehouse dispatch to MEX/CAN/RIC
-- **Last Mile** (`lm`): Venue delivery planning
+- **Vision 2026** (`v26`): Unified command view — dispatch volume chart, network map, cross-module stats
+- **Load Plan** (`lp`): Warehouse dispatch from Dallas to MEX/CAN/USA satellite warehouses
+  - 4 tabs: Arrivals, Demand, Plan, Late
+  - LP engine: `LP_buildLoadPlan()` — bin-packing algorithm for truck loading
+  - 8 destinations: TOR, VAN, CDMX, GDL, MTY, KC, HOU, NY
+- **Last Mile** (`lm`): Final mile delivery from regional hubs to individual venues
+  - Venue-based planning with truck capacity constraints
+  - Lead time calculation (bump-in date minus transit, skipping weekends)
 
-## Key Files from v1 to Migrate
-| v1 Feature | v1 Location | v2 Target |
+## Database Schema (v2)
+
+### LP Module (12 tables)
+| Table | Purpose | Key columns |
 |---|---|---|
-| LP Plan Engine | `LP_buildLoadPlan()` | `src/lib/lp/engine.ts` |
-| LM Plan Engine | `bV()`, `numberAll()` | `src/lib/lm/engine.ts` |
-| CI Export (ExcelJS) | `LP_exportCI_ExcelJS()` | `src/lib/exports/ci.ts` |
-| HS Code Assistant | `LP_showHSLookup()` | `src/lib/components/HSLookup.svelte` |
-| Supabase persistence | `LP_saveToSupabase()` | `src/lib/lp/persistence.ts` |
-| Backup/Restore | `masterBackupExport()` | `src/lib/backup.ts` |
+| `lp_settings` | Engine config (1 row) | turnaround, max_pallets, max_trucks, max_dests, ric_start_date, exclude_staples |
+| `lp_destinations` | 8 LP destinations | abbr (PK), name, country, transit_days, whs_days |
+| `lp_nomenclature` | SKU master | sku (PK), name, source, pallet_qty, pallet_spc, hs_code, country, unit_price |
+| `lp_demand` | Material plan rows | sku, destination, required_qty |
+| `lp_arrivals` | Container arrivals | sku, container, qty, arrival_date, ready_date, is_manual |
+| `lp_plan` | Generated truck plan | truck_id, dispatch_date, destination, sku, qty, pallets |
+| `lp_truck_dispatch` | Truck dispatch state | truck_id (PK), dispatched, lsr_number |
+| `lp_container_overrides` | Manual arrival date overrides | container (PK), override_date |
+| `lp_arrived_containers` | Arrived container flags | container_key (PK) |
+| `lp_pallet_overrides` | Manual pallet dimension overrides | sku (PK), pallet_qty, pallet_spc |
+| `lp_customs_overrides` | HS codes, country, price, customs name | sku (PK), hs_code, country, price, customs_name, hs_confirmed |
+| `lp_holds` | Destination+SKU holds | destination, sku, hold_type (UNIQUE) |
 
-## Shared State Keys (v1 format, read by migrate.ts)
-**LP keys**: `lp-config`, `lp-nom`, `lp-demand`, `lp-arrivals`, `lp-plan`, `lp-truck-state`
-**LM keys**: `fm-nom`, `fm-rw`, `fm-vs`, `fm-stock`, `fm-lm-dispatch`, `fm-manual-items`, `fm-lm-demand-adj`, `fm-lm-nom-ovr`, `fm-cluster-ta`, `fm-lm-manual-demand`, `fm-lm-kits`, `fm-lm-stp-deliveries`, `fm-dist-overrides`, `fm-pallet-cfg`
-**Other**: `hs-ai-config`
+### LM Module (14 tables)
+| Table | Purpose |
+|---|---|
+| `lm_nomenclature` | LM SKU master (pallet dims, assembled dims) |
+| `lm_demand` | Material plan (venue, sku, qty, bump-in date) |
+| `lm_venue_settings` | Per-venue config (capacity, max trucks, lead time) |
+| `lm_dispatch` | Truck dispatch state + date overrides |
+| `lm_excluded` | Excluded items |
+| `lm_manual_items` | Manual items added to trucks |
+| `lm_demand_adj` | Demand quantity adjustments |
+| `lm_nom_overrides` | Pallet dimension overrides |
+| `lm_manual_demand` | Manually added demand entries |
+| `lm_kits` + `lm_kit_items` | Kit definitions with child items (CASCADE delete) |
+| `lm_stp_deliveries` | STP delivery schedule |
+| `lm_dist_overrides` | Distribution rate overrides |
+| `lm_pallet_config` | Pallet mode (dis/asm) per venue type |
+
+### Shared (4 tables)
+| Table | Purpose |
+|---|---|
+| `stock_report` | Stock SKUs with quantities |
+| `app_settings` | Key-value settings (cluster turnaround, AI config) |
+| `audit_log` | Who changed what (table, row_id, action, old/new data) |
+
+### Views
+- `v_lp_demand` — joins demand + nomenclature + pallet overrides + customs overrides (single query for demand table)
+- `v_lp_truck_summary` — aggregates plan rows into truck summaries with dispatch state
+
+### Design Principles
+- Every mutable table has `created_at`, `updated_at` (auto-trigger), `updated_by`
+- RLS enabled on all tables (currently permissive, upgrade to JWT-based later)
+- `shared_state` table preserved — v1 continues to write to it independently
+
+## Design Tokens
+Defined in `app.css`, matching v1 exactly:
+
+| Token | Value | Usage |
+|---|---|---|
+| `--ac` | `#CF5D5D` | Accent / primary red |
+| `--as` | `#FDF0F0` | Accent surface |
+| `--ab` | `#E8A5A5` | Accent border |
+| `--gn` | `#12804A` | Green (success) |
+| `--gs` | `#E6F5ED` | Green surface |
+| `--or` | `#C4550A` | Orange (warnings) |
+| `--os` | `#FEF3EB` | Orange surface |
+| `--rd` | `#C62A2F` | Red (danger) |
+| `--pu` | `#6E3FF3` | Purple (overrides) |
+| `--ps` | `#F0EBFE` | Purple surface |
+| `--tp` | `#111318` | Text primary |
+| `--ts` | `#60646C` | Text secondary |
+| `--tt` | `#9CA0AA` | Text tertiary |
+| `--sf` | `#FFF` | Surface |
+| `--bg` | `#F4F5F7` | Background |
+| `--bd` | `#E2E4E9` | Border |
+| `--fd` | DM Sans | UI font |
+| `--fm` | IBM Plex Mono | Data/code font |
+
+### Button Classes
+- `.rbtn` — toolbar/inline buttons (11px, 6px radius)
+- `.mbtn` — modal buttons (12px, 8px radius, 700 weight)
+- `.mbtn-primary` — accent red, `.mbtn-danger` — red
+
+## Key Business Logic (from v1, to be ported)
+
+### LP Plan Engine
+- Bin-packing: fills trucks by destination, respecting max pallets/trucks/dests per day
+- Dispatched trucks are locked — regeneration only replans unlocked inventory
+- Stock holds: if stock qty < demand, excess destinations get auto-held
+- RIC start date: Richmond (USA domestic) trucks can't ship before this date
+
+### LP Transit Defaults
+| Destination | Transit Days | WHS Days | Country |
+|---|---|---|---|
+| Toronto | 7 | 3 | CAN |
+| Vancouver | 7 | 3 | CAN |
+| Mexico City | 7 | 3 | MEX |
+| Guadalajara | 7 | 3 | MEX |
+| Monterrey | 7 | 3 | MEX |
+| Kansas City | 1 | 3 | USA |
+| Houston | 1 | 3 | USA |
+| New York NJ | 3 | 3 | USA |
+
+### CI Export (Commercial Invoice)
+- ExcelJS-based Excel generation with merged cells for party data
+- Shipper (rows 12-17, A:D) / Consignee (E:I) / Broker (J:O)
+- Party data varies by destination: Mexico / Canada / RIC / blank
+- Customs overrides take priority: `co.hsCode||nm.hsCode`, `co.country||nm.country`, `co.price||nm.unitPrice`, `co.customsName||nm.name`
+- Combined CI: multi-destination export summing demand across selected destinations
+
+### HS Code Assistant
+- 3-step wizard: siblings → AI classification → manual category drill-down
+- AI providers: Claude Haiku, ChatGPT GPT-5 mini, Gemini Flash
+- URL-first AI prompt for product identification from retailer URLs
+- HS confirmation workflow: ○ unconfirmed / ✓ confirmed (green = ready for CI)
+- `_hsNormalize()`: strips to 6-digit format XXXX.XX
+- Sibling matching: only shows confirmed codes from same SKU prefix
+- Google search button + clipboard auto-paste on tab return
+
+### LM Plan Engine
+- Pallet calculation: qty ÷ pallet_qty × pallet_spc = pallet count
+- Date grouping: items grouped by bump-in date, dispatch = bump-in - lead_time (skip weekends)
+- Truck filling: bin-pack items into trucks respecting capacity
+- USA cluster trucks: add satellite warehouse turnaround to lead time
+- Kit support: kit items expand into component SKUs with shared pallet dimensions
+
+### Backup/Restore
+- Excel-based: 20 sheets covering all state
+- Includes: customs overrides, holds, locked rows, stock qtys, transit days, WHS days
+- Excludes: AI API keys (security), filter state (ephemeral)
 
 ## Dev Environment
 - **Node**: v24.14.0, **npm**: 11.9.0
 - **SSL**: `npm config set strict-ssl false` required (FIFA corporate proxy)
+- **Shell**: bash via PortableGit, use `.exe` suffix for Windows executables
+- **Fork limitation**: msys2 programs (ls, grep) fail to fork — use Read/Grep/Glob tools
 - **Git**: user.name=SM2ARTA, user.email=sm2arta@outlook.com
-- **No admin rights** on this machine
+- **v1 repo**: `SM2ARTA/LM-3000` (GitHub Pages at sm2arta.github.io/LM-3000)
+- **v2 repo**: `SM2ARTA/ML3K-v2` (Vercel at ml3k.smmarta.com)
+- **No admin rights** on this machine (FIFA corporate domain)
 
 ## Commands
 ```bash
-npm run dev          # Start dev server
+npm run dev          # Start dev server (http://localhost:5173)
 npm run build        # Production build
 npm run preview      # Preview production build
 ```
+
+## Post-Implementation Checklist (v2)
+
+### Database
+- [ ] New data goes to proper table, not shared_state
+- [ ] Use `db.ts` functions for reads/writes — never raw Supabase calls in components
+- [ ] Mutations debounced for rapid edits (use Svelte stores + save timers)
+- [ ] Multi-admin safe: row-level updates, not bulk overwrites
+
+### Components
+- [ ] Use Svelte stores for shared state (`$role`, `$activeModule`, etc.)
+- [ ] Admin-only elements check `$role === 'admin'`
+- [ ] Use design tokens from `app.css` — no hardcoded colors
+- [ ] `.rbtn` for toolbar, `.mbtn` for modals — never mix
+
+### Exports
+- [ ] CI exports use customs overrides: hs_code, country, price, customs_name
+- [ ] HS codes normalized to XXXX.XX format
+- [ ] Packing list and CI sheet both use override fallback chain
+
+### Copyright
+`©2026 Vladislav Abramov | SM²ARTA™`
