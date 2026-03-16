@@ -96,8 +96,10 @@ supabase/
 | Dashboard (venue stats, top venues) | ✅ Done |
 | Demand table (searchable) | ✅ Done |
 | Venues settings cards | ✅ Done |
-| Venue sidebar with clusters | ❌ Not ported |
-| Truck plan view | ❌ Not ported |
+| Venue sidebar with clusters | ✅ Done | Collapsible, searchable, grouped by cluster |
+| Truck plan view | ✅ Done | LM engine: pallet calc + truck packing + date grouping |
+| LM file upload | ✅ Done | `/lm/upload` — nom + material plan |
+| LM exports | ✅ Done | Demand + venue summary Excel |
 | Dispatch controls | ❌ Not ported |
 | Plan engine | ❌ Not ported |
 | File upload | ❌ Not ported |
@@ -105,10 +107,12 @@ supabase/
 ### V26 Module — Vision 2026
 | Feature | Status |
 |---|---|
-| Dispatch volume chart | ❌ Not ported |
+| KPI dashboard | ✅ Done | 4 stat cards + destination breakdown |
+| Dispatch volume chart (SVG) | ✅ Done | `DispatchChart.svelte` — bar chart with dispatch status colors |
+| Dispatch timeline table | ✅ Done | Date/trucks/pallets/pieces/dispatched |
+| V26 export | ✅ Done | By destination + timeline sheets |
+| Cross-module stats | ✅ Done | LP + LM + Stock counts |
 | Network map | ❌ Not ported |
-| Cross-module stats | ❌ Not ported |
-| Venue lookup | ❌ Not ported |
 
 ### Shared Features
 | Feature | Status |
@@ -118,7 +122,7 @@ supabase/
 | Bottom support bar | ✅ Done | `BottomBar.svelte` — context-sensitive exports |
 | Backup/Restore buttons | ✅ Done | Header — 💾 Backup, 📂 Restore |
 | Undo system | ✅ Done | `undo.ts` — snapshot/restore, ↩ Undo button |
-| Real-time multi-admin sync | ❌ Not built (Supabase Realtime ready) |
+| Real-time multi-admin sync | ✅ Ready | `realtime.ts` — subscription framework, not yet wired to UI |
 | Supabase Auth (replace password) | ❌ Not built |
 
 ## Technical Notes for Next Session
