@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { getLPDemand, getLPHolds, getLPTruckSummary, getLPPlan, getLPDestinations, getLPTruckDispatch, getLPArrivals, getStockReport, getLPSettings, updateCustomsOverride, toggleHSConfirm, updateTruckDispatch, saveLSR, holdBySource, getLPDemandForHolds, updateLPSettings, updateDestination } from '$lib/db';
 	import { role } from '$lib/stores';
-	import { TabBar, StatBadge, Spinner, SearchInput, FilterDropdown, DestBadge, EditableCell, ConfirmButton, TruckCard, HoldBar, BottomBar } from '$lib/components';
+	import { TabBar, StatBadge, Spinner, SearchInput, FilterDropdown, DestBadge, EditableCell, ConfirmButton, TruckCard, HoldBar, BottomBar, TruckModal } from '$lib/components';
 	import { fmtDate } from '$lib/utils';
 	import { exportLPPlan, exportLPDemand, exportLPArrivals } from '$lib/exports';
 	import { createSvelteTable, type ColumnDef, type SortingState } from '$lib/table.svelte';
@@ -25,6 +25,8 @@
 	let rawDemandForHolds = $state<any[]>([]);
 	let settings = $state<any>({ turnaround: 6, max_pallets: 26, max_trucks: 4, max_dests: 3, plan_generated: false });
 	let loading = $state(true);
+	let truckModalOpen = $state(false);
+	let selectedTruckId = $state(0);
 	let activeTab = $state('demand');
 	let globalFilter = $state('');
 	let sorting = $state<SortingState>([]);
@@ -363,6 +365,7 @@
 							onToggleDispatch={handleDispatch}
 							onDateChange={handleDateChange}
 							onLsrSave={handleLsrSave}
+							onclick={() => { selectedTruckId = t.id; truckModalOpen = true; }}
 						/>
 					{/each}
 				</div>
@@ -408,6 +411,9 @@
 		<div style="font-size:12px;color:var(--ts)">Coming soon — requires LM dispatch dates for comparison</div>
 	</div>
 {/if}
+
+<!-- Truck Detail Modal -->
+<TruckModal bind:open={truckModalOpen} truckId={selectedTruckId} {planRows} {truckDispatch} maxPallets={settings.max_pallets} />
 
 <!-- Bottom Bar -->
 {#if !loading}

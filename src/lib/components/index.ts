@@ -12,3 +12,4 @@ export { default as FilterDropdown } from './FilterDropdown.svelte';
 export { default as TruckCard } from './TruckCard.svelte';
 export { default as HoldBar } from './HoldBar.svelte';
 export { default as BottomBar } from './BottomBar.svelte';
+export { default as TruckModal } from './TruckModal.svelte';
