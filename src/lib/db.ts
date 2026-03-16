@@ -208,17 +208,30 @@ export async function getLPDemandForHolds() {
 // ── LM Data ──
 
 export async function getLMNomenclature() {
-	const { data } = await supabase.from('lm_nomenclature').select('*');
+	const { data, error } = await supabase.from('lm_nomenclature').select('*');
+	if (error) throw new Error('lm_nomenclature: ' + error.message);
 	return data || [];
 }
 
 export async function getLMDemand() {
-	const { data } = await supabase.from('lm_demand').select('*');
-	return data || [];
+	// Paginate to handle >1000 rows (Supabase default limit)
+	const all: any[] = [];
+	let from = 0;
+	const pageSize = 1000;
+	while (true) {
+		const { data, error } = await supabase.from('lm_demand').select('*').range(from, from + pageSize - 1);
+		if (error) throw new Error('lm_demand: ' + error.message);
+		if (!data || data.length === 0) break;
+		all.push(...data);
+		if (data.length < pageSize) break;
+		from += pageSize;
+	}
+	return all;
 }
 
 export async function getLMVenueSettings() {
-	const { data } = await supabase.from('lm_venue_settings').select('*');
+	const { data, error } = await supabase.from('lm_venue_settings').select('*');
+	if (error) throw new Error('lm_venue_settings: ' + error.message);
 	return data || [];
 }
 

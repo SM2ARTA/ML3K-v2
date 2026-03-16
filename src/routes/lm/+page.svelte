@@ -15,6 +15,7 @@
 	let selectedVenue = $state('');
 	let selectedCluster = $state('');
 	let sidebarOpen = $state(true);
+	const isAdmin = $derived($role === 'admin');
 
 	const lmTabs = [
 		{ id: 'dashboard', label: '📊 Dashboard' },
@@ -22,9 +23,15 @@
 		{ id: 'trucks', label: '🚛 Trucks' }
 	];
 
+	let loadError = $state('');
+
 	onMount(async () => {
-		const [n, d, v] = await Promise.all([getLMNomenclature(), getLMDemand(), getLMVenueSettings()]);
-		noms = n; demand = d; venueSettings = v;
+		try {
+			const [n, d, v] = await Promise.all([getLMNomenclature(), getLMDemand(), getLMVenueSettings()]);
+			noms = n; demand = d; venueSettings = v;
+		} catch (e: any) {
+			loadError = e?.message || 'Failed to load LM data';
+		}
 		loading = false;
 	});
 
@@ -102,6 +109,12 @@
 
 {#if loading}
 	<Spinner message="Loading Last Mile data..." />
+{:else if loadError}
+	<div style="padding:40px;text-align:center">
+		<div style="font-size:14px;font-weight:700;color:var(--rd);margin-bottom:8px">Failed to load Last Mile</div>
+		<div style="font-size:12px;color:var(--ts)">{loadError}</div>
+		<button class="rbtn" style="margin-top:12px" onclick={() => window.location.reload()}>🔄 Retry</button>
+	</div>
 {:else}
 	<div style="display:flex;height:calc(100vh - 100px);overflow:hidden">
 		<!-- Sidebar -->
