@@ -2,9 +2,11 @@
 	import { onMount } from 'svelte';
 	import { getLPDemand, getLPHolds, getLPTruckSummary, getLPPlan, getLPDestinations, getLPTruckDispatch, getLPArrivals, getStockReport, getLPSettings, getLPNomenclature, getLPCustomsOverrides, updateCustomsOverride, toggleHSConfirm, updateTruckDispatch, saveLSR, holdBySource, getLPDemandForHolds, updateLPSettings, updateDestination, upsertContainerOverride, getContainerOverrides, addManualArrival, deleteArrival, upsertPalletOverride } from '$lib/db';
 	import { role } from '$lib/stores';
+	import { supabase } from '$lib/supabase';
 	import { TabBar, StatBadge, Spinner, SearchInput, FilterDropdown, DestBadge, EditableCell, ConfirmButton, TruckCard, HoldBar, BottomBar, TruckModal, HSLookup, CombinedCIModal, NomUpdateModal } from '$lib/components';
 	import { fmtDate } from '$lib/utils';
 	import { exportLPPlan, exportLPDemand, exportLPArrivals } from '$lib/exports';
+	import { buildLoadPlan } from '$lib/lp-engine';
 	import { createSvelteTable, type ColumnDef, type SortingState } from '$lib/table.svelte';
 	import { getCoreRowModel, getSortedRowModel, getFilteredRowModel } from '@tanstack/table-core';
 
@@ -230,6 +232,65 @@
 		arrivals = await getLPArrivals();
 	}
 
+	let regenerating = $state(false);
+
+	async function handleRegenerate() {
+		if (!isAdmin) return;
+		regenerating = true;
+		try {
+			// Build demand in engine format
+			const engineDemand = rawDemand.map((d: any) => {
+				const dests = d.destinations || {};
+				return Object.entries(dests).map(([dest, qty]) => ({
+					destination: dest, sku: d.sku, name: d.name, requiredQty: qty as number,
+					palletQty: d.pallet_qty || 0, palletSpc: d.pallet_spc || 0,
+					sourceIds: [{ id: `${dest}|${d.sku}`, qty: qty as number }]
+				}));
+			}).flat();
+
+			// Build arrivals in engine format
+			const engineArrivals = arrivals.map(a => ({
+				sku: a.sku, name: a.name, qty: a.qty || 0,
+				readyDate: a.ready_date || a.arrival_date || '', arrivalDate: a.arrival_date || ''
+			}));
+
+			const holdsList = holds.map(h => `${h.destination}|${h.sku}`);
+			const stockSkusList = [...stockMap.keys()];
+
+			const newPlan = buildLoadPlan(engineDemand, engineArrivals, {
+				maxPallets: settings.max_pallets || 26,
+				maxTrucks: settings.max_trucks || 4,
+				maxDests: settings.max_dests || 3,
+				ricStartDate: settings.ric_start_date || '2026-04-01',
+				nomenclature: nomMap,
+				holds: holdsList,
+				stockSkus: stockSkusList,
+				excludeStaples: settings.exclude_staples
+			});
+
+			if (newPlan.length) {
+				// Save to Supabase
+				await supabase.from('lp_plan').delete().neq('id', 0);
+				const planRows = newPlan.map(r => ({
+					truck_id: r.truckId, dispatch_date: r.date, destination: r.destination,
+					sku: r.sku, name: r.name, qty: r.qty, pallets: r.pallets
+				}));
+				for (let i = 0; i < planRows.length; i += 500) {
+					await supabase.from('lp_plan').insert(planRows.slice(i, i + 500));
+				}
+				await supabase.from('lp_settings').update({ plan_generated: true }).eq('id', 1);
+			}
+
+			// Reload
+			const [p, td] = await Promise.all([getLPPlan(), getLPTruckDispatch()]);
+			planRows = p; truckDispatch = td;
+		} catch (e: any) {
+			console.error('Regenerate failed:', e);
+			alert('Plan generation failed: ' + e.message);
+		}
+		regenerating = false;
+	}
+
 	async function handleLsrSave(truckId: number, lsr: string) {
 		if (!isAdmin) return;
 		await saveLSR(truckId, lsr);
@@ -351,6 +412,13 @@
 	<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
 		<StatBadge label="{trucks.length} trucks · {trucks.reduce((s,t) => s + t.totalQty, 0).toLocaleString()} pcs · {trucks.reduce((s,t) => s + t.totalPallets, 0).toFixed(1)} plt" />
 		<StatBadge label="🔒 {trucks.filter(t => t.dispatched).length} locked" variant="green" />
+		{#if isAdmin}
+			<button class="rbtn" onclick={handleRegenerate} disabled={regenerating}
+				style="font-size:10px;padding:3px 10px;background:var(--as);color:var(--ac);border-color:var(--ab)">
+				{regenerating ? '⏳ Generating...' : '🔄 Regenerate Plan'}
+			</button>
+			<a href="/lp/upload" class="rbtn" style="font-size:10px;padding:3px 10px;text-decoration:none">📂 Upload Files</a>
+		{/if}
 	</div>
 
 	<!-- Engine Settings -->
