@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { getLPDemand, getLPHolds, getLPTruckSummary, getLPPlan, getLPDestinations, getLPTruckDispatch, getLPArrivals, getStockReport, getLPSettings, getLPNomenclature, getLPCustomsOverrides, updateCustomsOverride, toggleHSConfirm, updateTruckDispatch, saveLSR, holdBySource, getLPDemandForHolds, updateLPSettings, updateDestination } from '$lib/db';
+	import { getLPDemand, getLPHolds, getLPTruckSummary, getLPPlan, getLPDestinations, getLPTruckDispatch, getLPArrivals, getStockReport, getLPSettings, getLPNomenclature, getLPCustomsOverrides, updateCustomsOverride, toggleHSConfirm, updateTruckDispatch, saveLSR, holdBySource, getLPDemandForHolds, updateLPSettings, updateDestination, upsertContainerOverride, getContainerOverrides, addManualArrival, deleteArrival, upsertPalletOverride } from '$lib/db';
 	import { role } from '$lib/stores';
-	import { TabBar, StatBadge, Spinner, SearchInput, FilterDropdown, DestBadge, EditableCell, ConfirmButton, TruckCard, HoldBar, BottomBar, TruckModal, HSLookup, CombinedCIModal } from '$lib/components';
+	import { TabBar, StatBadge, Spinner, SearchInput, FilterDropdown, DestBadge, EditableCell, ConfirmButton, TruckCard, HoldBar, BottomBar, TruckModal, HSLookup, CombinedCIModal, NomUpdateModal } from '$lib/components';
 	import { fmtDate } from '$lib/utils';
 	import { exportLPPlan, exportLPDemand, exportLPArrivals } from '$lib/exports';
 	import { createSvelteTable, type ColumnDef, type SortingState } from '$lib/table.svelte';
@@ -26,6 +26,9 @@
 	let settings = $state<any>({ turnaround: 6, max_pallets: 26, max_trucks: 4, max_dests: 3, plan_generated: false });
 	let nomMap = $state<Record<string, any>>({});
 	let custOvrMap = $state<Record<string, any>>({});
+	let contOverrides = $state<Record<string, string>>({});
+	let showAddArrival = $state(false);
+	let newArrival = $state({ sku: '', name: '', container: '', qty: 0, arrival_date: '', ready_date: '' });
 	let loading = $state(true);
 	let truckModalOpen = $state(false);
 	let selectedTruckId = $state(0);
@@ -33,6 +36,7 @@
 	let hsLookupSku = $state('');
 	let hsLookupName = $state('');
 	let combinedCIOpen = $state(false);
+	let nomUpdateOpen = $state(false);
 	let activeTab = $state('demand');
 	let globalFilter = $state('');
 	let sorting = $state<SortingState>([]);
@@ -162,6 +166,8 @@
 		if (sets) settings = sets;
 		nomMap = Object.fromEntries((noms || []).map((n: any) => [n.sku, n]));
 		custOvrMap = Object.fromEntries((custOvr || []).map((c: any) => [c.sku, c]));
+		const co = await getContainerOverrides();
+		contOverrides = Object.fromEntries(co.map((c: any) => [c.container, c.override_date]));
 		loading = false;
 	});
 
@@ -188,6 +194,40 @@
 		// Update plan rows for this truck
 		// Note: in v2 we'd update the plan table directly; for now just refresh
 		truckDispatch = await getLPTruckDispatch();
+	}
+
+	async function onPalletChange(sku: string, field: string, value: string) {
+		if (!isAdmin) return;
+		const num = parseFloat(value) || 0;
+		const existing = nomMap[sku] || {};
+		const pq = field === 'pallet_qty' ? num : (existing.pallet_qty || 0);
+		const ps = field === 'pallet_spc' ? num : (existing.pallet_spc || 0);
+		if (pq > 0 && ps > 0) await upsertPalletOverride(sku, pq, ps);
+	}
+
+	async function handleContainerOverride(container: string, date: string) {
+		if (!isAdmin || !container) return;
+		await upsertContainerOverride(container, date);
+		contOverrides = { ...contOverrides, [container]: date };
+	}
+
+	async function handleAddArrival() {
+		if (!isAdmin) return;
+		if (!newArrival.sku || !newArrival.arrival_date) return;
+		await addManualArrival({
+			sku: newArrival.sku, name: newArrival.name, container: newArrival.container || 'MANUAL',
+			qty: newArrival.qty, arrival_date: newArrival.arrival_date, ready_date: newArrival.ready_date || newArrival.arrival_date,
+			avail_pallets: 0
+		});
+		arrivals = await getLPArrivals();
+		showAddArrival = false;
+		newArrival = { sku: '', name: '', container: '', qty: 0, arrival_date: '', ready_date: '' };
+	}
+
+	async function handleDeleteArrival(id: number) {
+		if (!isAdmin) return;
+		await deleteArrival(id);
+		arrivals = await getLPArrivals();
 	}
 
 	async function handleLsrSave(truckId: number, lsr: string) {
@@ -288,7 +328,13 @@
 						</td>
 						<td><EditableCell value={r.country || ''} placeholder="China" width="44px" {isAdmin} onsave={(v) => onCustomsChange(r.sku, 'country', v)} /></td>
 						<td><EditableCell value={r.customs_name || ''} placeholder="Customs desc" width="90px" {isAdmin} onsave={(v) => onCustomsChange(r.sku, 'customs_name', v)} /></td>
-						<td class="mono">{r.pallet_qty || '—'}</td>
+						<td class="mono">
+							{#if isAdmin}
+								<input type="number" value={r.pallet_qty || ''} min="1" step="1" placeholder="qty"
+									onchange={(e) => onPalletChange(r.sku, 'pallet_qty', e.currentTarget.value)}
+									style="width:45px;font-size:10px;font-family:var(--fm);padding:2px 3px;border:1px solid var(--bd);border-radius:4px;outline:none">
+							{:else}{r.pallet_qty || '—'}{/if}
+						</td>
 						<td class="mono">{r.totalPallets > 0 ? r.totalPallets.toFixed(1) : '—'}</td>
 						<td style="white-space:normal">
 							{#each Object.entries(r.dests).sort((a, b) => b[1] - a[1]) as [dest, qty]}
@@ -393,30 +439,76 @@
 
 {:else if activeTab === 'arrivals'}
 	<!-- Arrivals Tab -->
-	<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+	<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
 		<StatBadge label="{arrivals.length} arrival items" />
 		<StatBadge label="{arrivals.filter(a => a.is_manual).length} manual" variant="purple" />
+		<StatBadge label="{Object.keys(contOverrides).length} date overrides" variant="orange" />
+		{#if isAdmin}
+			<button class="rbtn" onclick={() => showAddArrival = !showAddArrival} style="font-size:10px;padding:3px 8px;background:var(--gs);color:var(--gn);border-color:#B8DFCA">
+				{showAddArrival ? '✕ Cancel' : '+ Add Manual'}
+			</button>
+		{/if}
 	</div>
 
-	<div style="overflow-x:auto;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);max-height:calc(100vh - 200px);overflow-y:auto">
+	<!-- Add manual arrival form -->
+	{#if showAddArrival && isAdmin}
+		<div class="card" style="margin-bottom:10px;padding:12px">
+			<div style="font-size:11px;font-weight:700;margin-bottom:8px">Add Manual Arrival</div>
+			<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">
+				<div><label style="font-size:9px;color:var(--ts);display:block;margin-bottom:2px">SKU *</label>
+					<input type="text" bind:value={newArrival.sku} placeholder="SKU-001" style="width:100%;padding:5px 8px;border:1px solid var(--bd);border-radius:4px;font-size:11px;font-family:var(--fm);outline:none;box-sizing:border-box"></div>
+				<div><label style="font-size:9px;color:var(--ts);display:block;margin-bottom:2px">Name</label>
+					<input type="text" bind:value={newArrival.name} placeholder="Product name" style="width:100%;padding:5px 8px;border:1px solid var(--bd);border-radius:4px;font-size:11px;outline:none;box-sizing:border-box"></div>
+				<div><label style="font-size:9px;color:var(--ts);display:block;margin-bottom:2px">Container</label>
+					<input type="text" bind:value={newArrival.container} placeholder="CONT-001" style="width:100%;padding:5px 8px;border:1px solid var(--bd);border-radius:4px;font-size:11px;font-family:var(--fm);outline:none;box-sizing:border-box"></div>
+				<div><label style="font-size:9px;color:var(--ts);display:block;margin-bottom:2px">Qty</label>
+					<input type="number" bind:value={newArrival.qty} style="width:100%;padding:5px 8px;border:1px solid var(--bd);border-radius:4px;font-size:11px;font-family:var(--fm);outline:none;box-sizing:border-box"></div>
+				<div><label style="font-size:9px;color:var(--ts);display:block;margin-bottom:2px">Arrival Date *</label>
+					<input type="date" bind:value={newArrival.arrival_date} style="width:100%;padding:5px 8px;border:1px solid var(--bd);border-radius:4px;font-size:11px;outline:none;box-sizing:border-box"></div>
+				<div><label style="font-size:9px;color:var(--ts);display:block;margin-bottom:2px">Ready Date</label>
+					<input type="date" bind:value={newArrival.ready_date} style="width:100%;padding:5px 8px;border:1px solid var(--bd);border-radius:4px;font-size:11px;outline:none;box-sizing:border-box"></div>
+			</div>
+			<button class="mbtn mbtn-primary" onclick={handleAddArrival} style="margin-top:8px;padding:6px 16px;font-size:11px">Add Arrival</button>
+		</div>
+	{/if}
+
+	<div style="overflow-x:auto;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);max-height:calc(100vh - {showAddArrival ? '360' : '200'}px);overflow-y:auto">
 		<table class="dtb">
 			<thead style="position:sticky;top:0;background:var(--sf);z-index:10">
 				<tr>
 					<th>SKU</th><th>Name</th><th>Container</th><th>Qty</th>
-					<th>Arrival Date</th><th>Ready Date</th><th>Pallets</th><th>Manual</th>
+					<th>Arrival Date</th><th>Ready Date</th><th>Pallets</th><th></th>
 				</tr>
 			</thead>
 			<tbody>
 				{#each arrivals as a}
-					<tr>
+					{@const hasOverride = a.container && contOverrides[a.container]}
+					<tr style={a.is_manual ? 'background:var(--ps)' : hasOverride ? 'background:var(--os)' : ''}>
 						<td class="mono" style="font-weight:600">{a.sku}</td>
 						<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{a.name || '—'}</td>
 						<td class="mono" style="font-size:10px">{a.container || '—'}</td>
 						<td class="mono fw7">{(a.qty || 0).toLocaleString()}</td>
-						<td class="mono">{a.arrival_date || '—'}</td>
+						<td class="mono">
+							{#if isAdmin && a.container}
+								<input type="date" value={contOverrides[a.container] || a.arrival_date || ''}
+									onchange={(e) => handleContainerOverride(a.container, e.currentTarget.value)}
+									style="font-size:10px;font-family:var(--fm);padding:2px 4px;border:1px solid {hasOverride ? 'var(--or)' : 'var(--bd)'};border-radius:4px;outline:none;width:110px;background:{hasOverride ? 'var(--os)' : 'var(--sf)'}">
+							{:else}
+								{hasOverride ? contOverrides[a.container] : a.arrival_date || '—'}
+							{/if}
+						</td>
 						<td class="mono">{a.ready_date || '—'}</td>
 						<td class="mono">{a.avail_pallets ? a.avail_pallets.toFixed(1) : '—'}</td>
-						<td>{a.is_manual ? '✏️' : ''}</td>
+						<td>
+							{#if a.is_manual}
+								<span style="font-size:9px;color:var(--pu);background:var(--ps);padding:1px 4px;border-radius:3px">✏️ manual</span>
+								{#if isAdmin}
+									<button onclick={() => handleDeleteArrival(a.id)} style="background:none;border:none;cursor:pointer;color:var(--rd);font-size:12px;margin-left:4px" title="Delete">✕</button>
+								{/if}
+							{:else if hasOverride}
+								<span style="font-size:9px;color:var(--or)">📅 override</span>
+							{/if}
+						</td>
 					</tr>
 				{/each}
 			</tbody>
@@ -468,6 +560,10 @@
 	{/if}
 {/if}
 
+<!-- Nom Update Modal -->
+<NomUpdateModal bind:open={nomUpdateOpen} customsOverrides={custOvrMap}
+	onComplete={async () => { rawDemand = await getLPDemand(); nomMap = Object.fromEntries(((await getLPNomenclature()) || []).map((n) => [n.sku, n])); }} />
+
 <!-- Combined CI Modal -->
 <CombinedCIModal bind:open={combinedCIOpen} demandData={data} nomenclature={nomMap} customsOverrides={custOvrMap} />
 
@@ -485,6 +581,9 @@
 		{#if activeTab === 'demand' && data.length}
 			<button class="rbtn" style="background:var(--as);color:var(--ac);border-color:var(--ab)"
 				onclick={() => exportLPDemand(data)}>⬇ Export Demand</button>
+			{#if isAdmin}
+				<button class="rbtn" onclick={() => nomUpdateOpen = true} style="font-size:10px">📋 Update Nom</button>
+			{/if}
 		{/if}
 		{#if activeTab === 'plan' && planRows.length}
 			<button class="rbtn" style="background:var(--as);color:var(--ac);border-color:var(--ab)"
