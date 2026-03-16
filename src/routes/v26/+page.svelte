@@ -33,6 +33,21 @@
 	let totalDispatched = $derived(trucks.filter(t => t.dispatched).length);
 	let totalPallets = $derived(trucks.reduce((s, t) => s + (t.total_pallets || 0), 0));
 	let totalQty = $derived(trucks.reduce((s, t) => s + (t.total_qty || 0), 0));
+
+	// Dispatch timeline — group trucks by date
+	let timeline = $derived.by(() => {
+		const map = new Map<string, { date: string; trucks: number; pallets: number; qty: number; dispatched: number }>();
+		for (const t of trucks) {
+			const d = t.dispatch_date || 'No date';
+			if (!map.has(d)) map.set(d, { date: d, trucks: 0, pallets: 0, qty: 0, dispatched: 0 });
+			const day = map.get(d)!;
+			day.trucks++;
+			day.pallets += t.total_pallets || 0;
+			day.qty += t.total_qty || 0;
+			if (t.dispatched) day.dispatched++;
+		}
+		return [...map.values()].sort((a, b) => a.date.localeCompare(b.date));
+	});
 </script>
 
 {#if loading}
@@ -84,6 +99,35 @@
 				{/each}
 			</div>
 		</Card>
+
+		<!-- Dispatch Timeline -->
+		{#if timeline.length > 0}
+			<Card>
+				<div style="font-size:14px;font-weight:700;margin-bottom:12px">📅 Dispatch Timeline</div>
+				<div style="overflow-x:auto;max-height:300px;overflow-y:auto">
+					<table class="dtb">
+						<thead style="position:sticky;top:0;background:var(--sf)">
+							<tr><th>Date</th><th>Trucks</th><th>Pallets</th><th>Pieces</th><th>Dispatched</th></tr>
+						</thead>
+						<tbody>
+							{#each timeline as day}
+								<tr>
+									<td class="mono" style="font-weight:600">{day.date}</td>
+									<td class="mono">{day.trucks}</td>
+									<td class="mono">{day.pallets.toFixed(1)}</td>
+									<td class="mono">{day.qty.toLocaleString()}</td>
+									<td>
+										{#if day.dispatched > 0}
+											<span style="font-size:9px;color:var(--gn);background:var(--gs);padding:1px 5px;border-radius:3px">🔒 {day.dispatched}</span>
+										{/if}
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			</Card>
+		{/if}
 
 		<!-- Module Stats -->
 		<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
