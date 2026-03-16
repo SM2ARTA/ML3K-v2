@@ -208,18 +208,18 @@ export async function getLPDemandForHolds() {
 // ── LM Data ──
 
 export async function getLMNomenclature() {
-	const { data, error } = await supabase.from('lm_nomenclature').select('*');
+	const { data, error } = await supabase.from('lm_nomenclature').select('sku,name,source,pallet_qty,pallet_spc,pallet_qty_asm,pallet_spc_asm');
 	if (error) throw new Error('lm_nomenclature: ' + error.message);
 	return data || [];
 }
 
 export async function getLMDemand() {
-	// Paginate to handle >1000 rows (Supabase default limit)
+	// Fetch with larger page size to minimize round-trips
 	const all: any[] = [];
 	let from = 0;
-	const pageSize = 1000;
+	const pageSize = 5000;
 	while (true) {
-		const { data, error } = await supabase.from('lm_demand').select('*').range(from, from + pageSize - 1);
+		const { data, error } = await supabase.from('lm_demand').select('venue,venue_code,venue_type,venue_cluster,sku,required_qty,bump_in_date,is_manual,id').range(from, from + pageSize - 1).limit(pageSize);
 		if (error) throw new Error('lm_demand: ' + error.message);
 		if (!data || data.length === 0) break;
 		all.push(...data);

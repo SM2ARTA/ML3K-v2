@@ -66,11 +66,18 @@
 		{ id: 'trucks', label: '🚛 Trucks' }
 	];
 
-	// ── Load ──
+	// ── Load (two-phase: critical first, then secondary) ──
 	onMount(async () => {
 		try {
-			const [n, d, v, disp, pc, adj, no, md, k, stp, excl, mi, dov, sq, ct] = await Promise.all([
-				getLMNomenclature(), getLMDemand(), getLMVenueSettings(),
+			// Phase 1: Core data needed to render dashboard (3 queries)
+			const [n, d, v] = await Promise.all([
+				getLMNomenclature(), getLMDemand(), getLMVenueSettings()
+			]);
+			noms = n; demand = d; venueSettings = v;
+			loading = false; // Show page immediately
+
+			// Phase 2: Secondary data loaded in background (12 queries)
+			const [disp, pc, adj, no, md, k, stp, excl, mi, dov, sq, ct] = await Promise.all([
 				getLMDispatch(), getLMPalletConfig(),
 				getLMDemandAdj(), getLMNomOverrides(),
 				getLMManualDemand(), getLMKits(),
@@ -78,7 +85,6 @@
 				getLMManualItems(), getLMDistOverrides(),
 				getStockQtyMap(), getAppSetting('lm_cluster_turnaround')
 			]);
-			noms = n; demand = d; venueSettings = v;
 			dispatchState = disp;
 			palletConfig = pc;
 			demandAdj = Object.fromEntries((adj || []).map((a: any) => [a.venue_sku, a.adjusted_qty]));
@@ -93,8 +99,8 @@
 			clusterTurnaround = typeof ct === 'number' ? ct : (ct?.value ? Number(ct.value) : 5);
 		} catch (e: any) {
 			loadError = e?.message || 'Failed to load LM data';
+			loading = false;
 		}
-		loading = false;
 	});
 
 	// ── Derived data ──
