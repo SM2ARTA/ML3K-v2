@@ -141,6 +141,7 @@
 	<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
 		<span style="font-size:11px;padding:4px 10px;border-radius:4px;background:var(--bg);color:var(--ts);font-weight:600">
 			{filteredRows.length} SKUs · {grandQty.toLocaleString()} pcs · {grandPlt.toFixed(1)} plt
+			<span style="font-size:9px;color:var(--tt);margin-left:4px">({demand.length} raw rows)</span>
 		</span>
 		<span style="font-size:11px;padding:4px 10px;border-radius:4px;background:var(--gs);color:var(--gn);font-weight:600">
 			✓ {confirmedCount} confirmed
