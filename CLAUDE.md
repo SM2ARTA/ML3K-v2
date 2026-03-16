@@ -27,20 +27,99 @@ SvelteKit rebuild of ML3K. Ground transport logistics for FWC26 — trucks, stad
 ```
 src/
 ├── lib/
-│   ├── supabase.ts      — Supabase client (reads from .env)
-│   ├── db.ts             — v2 database access layer (reads/writes proper tables)
-│   ├── stores.ts         — Svelte stores (role, module, LP/LM state)
-│   ├── migrate.ts        — Bridge: reads v1 shared_state (Phase 1, will be removed)
-│   └── index.ts          — Library exports
+│   ├── components/        — 12 shared Svelte components (see below)
+│   │   ├── TabBar.svelte, StatBadge.svelte, Spinner.svelte, Card.svelte
+│   │   ├── SearchInput.svelte, FilterDropdown.svelte, Modal.svelte
+│   │   ├── EditableCell.svelte, ConfirmButton.svelte, DestBadge.svelte
+│   │   ├── ProgressBar.svelte, TruckCard.svelte
+│   │   └── index.ts       — barrel export
+│   ├── supabase.ts        — Supabase client (reads from .env)
+│   ├── db.ts              — v2 database access layer (RPC + proper tables)
+│   ├── table.svelte.ts    — TanStack Table adapter for Svelte 5 (uses $state)
+│   ├── stores.ts          — Svelte stores (role, module, state)
+│   ├── migrate.ts         — Bridge: reads v1 shared_state (keeps v1 working)
+│   └── index.ts
 ├── routes/
-│   ├── +layout.svelte    — App shell (header, module switcher, auth gate)
-│   └── +page.svelte      — Login + dashboard with v1/v2 comparison
-├── app.css               — Design tokens (matches v1)
-└── app.html              — HTML template with Google Fonts
+│   ├── +layout.svelte     — App shell (header, module switcher, auth, routing)
+│   ├── +page.svelte       — Login + dashboard with v1/v2 comparison stats
+│   ├── lp/+page.svelte    — Load Plan (Demand, Plan, Arrivals, Late tabs)
+│   ├── lm/+page.svelte    — Last Mile (placeholder)
+│   └── v26/+page.svelte   — Vision 2026 (placeholder)
+├── app.css                — Design tokens (matches v1)
+└── app.html               — HTML template with Google Fonts
 supabase/
 ├── 001_initial_schema.sql — 30 tables, views, triggers, RLS
-└── 002_migrate_data.sql   — Data migration from shared_state to proper tables
+├── 002_migrate_data.sql   — Data migration from shared_state to proper tables
+└── 003_demand_aggregate.sql — RPC function: get_lp_demand_by_sku()
 ```
+
+## Build Status & What's Left to Port from v1
+
+### LP Module — Load Plan
+| Feature | Status | v1 Reference |
+|---|---|---|
+| Demand table with TanStack sorting | ✅ Done | `LP_renderDemand()` |
+| Inline customs editing (HS, COO, price, name) | ✅ Done | `LP_customsInput()` |
+| HS confirm button (○/✓) | ✅ Done | `LP_toggleHSConfirm()` |
+| Source + Destination multi-select filters | ✅ Done | `LP_filterDemand()` |
+| Global search | ✅ Done | TanStack globalFilter |
+| Plan tab with truck cards grouped by date | ✅ Basic | `LP_renderPlan()` |
+| Arrivals table | ✅ Basic | `LP_renderArrivals()` |
+| **Hold by source bar** | ❌ Not ported | Hold/Release buttons + dest status badges |
+| **Combined CI button + modal** | ❌ Not ported | `LP_showCombinedCIModal()` |
+| **CAN/MEX/USA dest quick-select** | ❌ Not ported | `_lpDemDestGroup()` |
+| **HS Code Assistant (AI wizard)** | ❌ Not ported | `LP_showHSLookup()` |
+| **Stock qty column** | ❌ Not ported | `STOCK_QTYS` display |
+| **Destination color coding** | ❌ Not ported | `LP_destColor()` |
+| **Truck card click → detail modal** | ❌ Not ported | `LP_showTruckModal()` |
+| **CI export (per truck)** | ❌ Not ported | `LP_exportCI_ExcelJS()` |
+| **Plan export (Excel)** | ❌ Not ported | `LP_exportPlan()` |
+| **Lock/dispatch with Supabase save** | ❌ Not ported | `LP_toggleDispatch()` |
+| **Date change on trucks** | ❌ Not ported | `LP_changeDate()` |
+| **LSR save to Supabase** | ❌ Not ported | `LP_lsrSave()` |
+| **Container date overrides** | ❌ Not ported | `LP_setContDate()` |
+| **Manual arrivals** | ❌ Not ported | `LP_addArrivalItem()` |
+| **Pallet overrides** | ❌ Not ported | `LP_setPalletOvr()` |
+| **Late tab (cross-module)** | ❌ Not ported | `LP_renderLate()` |
+| **Plan regeneration engine** | ❌ Not ported | `LP_buildLoadPlan()`, `LP_regenerate()` |
+| **File upload (nom, demand, arrivals)** | ❌ Not ported | `LP_parseNomenclature()` etc. |
+| **Nom update (partial re-import)** | ❌ Not ported | `LP_updateNomPrompt()` |
+
+### LM Module — Last Mile
+| Feature | Status |
+|---|---|
+| Venue sidebar with clusters | ❌ Not ported |
+| Dashboard view | ❌ Not ported |
+| Demand table | ❌ Not ported |
+| Truck plan view | ❌ Not ported |
+| Dispatch controls | ❌ Not ported |
+| Plan engine | ❌ Not ported |
+| File upload | ❌ Not ported |
+
+### V26 Module — Vision 2026
+| Feature | Status |
+|---|---|
+| Dispatch volume chart | ❌ Not ported |
+| Network map | ❌ Not ported |
+| Cross-module stats | ❌ Not ported |
+| Venue lookup | ❌ Not ported |
+
+### Shared Features
+| Feature | Status |
+|---|---|
+| Backup/Restore (Excel) | ❌ Not ported |
+| Undo system | ❌ Not ported |
+| Help dialog | ❌ Not ported |
+| Bottom support bar | ❌ Not ported |
+| Real-time multi-admin sync | ❌ Not built |
+| Supabase Auth (replace password) | ❌ Not built |
+
+## Technical Notes for Next Session
+- **Supabase 1000 row limit**: Use RPC functions for large datasets. `get_lp_demand_by_sku()` aggregates 24k rows to ~350 SKU rows server-side.
+- **Svelte 5 runes**: Files using `$state` must be `.svelte.ts` not plain `.ts`
+- **TanStack Table**: Using `@tanstack/table-core` with custom adapter in `table.svelte.ts` (official Svelte 5 adapter not available yet)
+- **Vercel adapter**: `@sveltejs/adapter-vercel` — local build fails on Windows (symlink perms) but Vercel builds fine on Linux
+- **Build tag**: Bump `b0316x` in `+layout.svelte` header to verify deployments
 
 ## Three Modules
 - **Vision 2026** (`v26`): Unified command view — dispatch volume chart, network map, cross-module stats
