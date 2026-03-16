@@ -29,9 +29,48 @@
 		};
 		return map[dest] || dest.slice(0, 3).toUpperCase();
 	}
+
+	let svgEl: SVGSVGElement;
+
+	function downloadSVG() {
+		if (!svgEl) return;
+		const data = new XMLSerializer().serializeToString(svgEl);
+		const blob = new Blob([data], { type: 'image/svg+xml' });
+		const a = document.createElement('a');
+		a.href = URL.createObjectURL(blob);
+		a.download = 'FWC26_Network_Map.svg';
+		a.click();
+		URL.revokeObjectURL(a.href);
+	}
+
+	function downloadPNG() {
+		if (!svgEl) return;
+		const data = new XMLSerializer().serializeToString(svgEl);
+		const canvas = document.createElement('canvas');
+		canvas.width = 1920; canvas.height = 1240;
+		const ctx = canvas.getContext('2d');
+		if (!ctx) return;
+		const img = new Image();
+		img.onload = () => {
+			ctx.drawImage(img, 0, 0, 1920, 1240);
+			canvas.toBlob(b => {
+				if (!b) return;
+				const a = document.createElement('a');
+				a.href = URL.createObjectURL(b);
+				a.download = 'FWC26_Network_Map.png';
+				a.click();
+				URL.revokeObjectURL(a.href);
+			}, 'image/png');
+		};
+		img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(data)));
+	}
 </script>
 
-<svg viewBox="0 0 560 380" style="width:100%;max-width:560px;height:auto">
+<div style="display:flex;gap:6px;margin-bottom:6px">
+	<button class="rbtn" onclick={downloadSVG} style="font-size:10px;padding:4px 10px">⬇ SVG</button>
+	<button class="rbtn" onclick={downloadPNG} style="font-size:10px;padding:4px 10px">⬇ PNG</button>
+</div>
+<svg bind:this={svgEl} viewBox="0 0 560 380" style="width:100%;max-width:560px;height:auto" xmlns="http://www.w3.org/2000/svg">
 	<!-- Lines from Dallas to destinations -->
 	{#each destinations as d}
 		{@const pos = getPos(d.dest)}

@@ -68,6 +68,12 @@
 
 	let holdSet = $derived(new Set(holds.map(h => `${h.destination}|${h.sku}`)));
 
+	const destGroups = [
+		{ label: '🇨🇦 CAN', items: ['Toronto', 'Vancouver'], title: 'Toronto, Vancouver' },
+		{ label: '🇲🇽 MEX', items: ['Mexico City', 'Guadalajara', 'Monterrey'], title: 'Mexico City, Guadalajara, Monterrey' },
+		{ label: '🇺🇸 USA', items: ['Houston', 'Kansas City', 'New York New Jersey'], title: 'Houston, Kansas City, New York' }
+	];
+
 	// Aggregate plan rows into trucks for Plan tab
 	let trucks = $derived.by(() => {
 		const map = new Map<number, any>();
@@ -383,7 +389,14 @@
 	<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
 		<SearchInput bind:value={globalFilter} placeholder="Search SKU, name, source..." />
 		<FilterDropdown label="Sources" items={allSources} bind:selected={selectedSources} allLabel="All" />
-		<FilterDropdown label="Destinations" items={allDests} bind:selected={selectedDests} allLabel="All" />
+		<FilterDropdown label="Destinations" items={allDests} bind:selected={selectedDests} allLabel="All" groups={destGroups} />
+		{#if isAdmin}
+			<label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--ts);white-space:nowrap;cursor:pointer;user-select:none">
+				<input type="checkbox" checked={settings.exclude_staples !== false}
+					onchange={(e) => { settings.exclude_staples = e.currentTarget.checked; updateLPSettings({ exclude_staples: settings.exclude_staples }); }}>
+				Exclude STAPLES USA
+			</label>
+		{/if}
 	</div>
 
 	<!-- Hold Bar -->

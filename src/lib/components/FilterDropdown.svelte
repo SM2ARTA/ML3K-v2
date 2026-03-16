@@ -1,6 +1,7 @@
 <script lang="ts">
-	let { label, items, selected = $bindable(new Set<string>()), allLabel = 'All' }: {
+	let { label, items, selected = $bindable(new Set<string>()), allLabel = 'All', groups = [] }: {
 		label: string; items: string[]; selected: Set<string>; allLabel?: string;
+		groups?: { label: string; items: string[]; title?: string }[];
 	} = $props();
 
 	let open = $state(false);
@@ -14,6 +15,9 @@
 	}
 	function selectAll(all: boolean) {
 		selected = all ? new Set(items) : new Set();
+	}
+	function selectGroup(groupItems: string[]) {
+		selected = new Set(groupItems.filter(g => items.includes(g)));
 	}
 	function onClickOutside(e: MouseEvent) {
 		if (open && !(e.target as HTMLElement)?.closest('.filter-dd')) open = false;
@@ -29,6 +33,9 @@
 			<div class="dd-actions">
 				<button onclick={() => selectAll(true)} class="dd-btn dd-btn-all">All</button>
 				<button onclick={() => selectAll(false)} class="dd-btn dd-btn-none">None</button>
+				{#each groups as g}
+					<button onclick={() => selectGroup(g.items)} class="dd-btn" title={g.title || ''}>{g.label}</button>
+				{/each}
 			</div>
 			{#each items as item}
 				<label class="dd-item">
@@ -42,7 +49,7 @@
 
 <style>
 	.dd-panel { position: absolute; top: 34px; left: 0; z-index: 90; background: var(--sf); border: 1px solid var(--bd); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.1); padding: 6px; min-width: 160px; max-height: 260px; overflow-y: auto; }
-	.dd-actions { display: flex; gap: 4px; margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px solid var(--bd); }
+	.dd-actions { display: flex; gap: 4px; margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px solid var(--bd); flex-wrap: wrap; }
 	.dd-btn { font-size: 9px; padding: 2px 6px; border: 1px solid var(--bd); border-radius: 3px; cursor: pointer; }
 	.dd-btn-all { background: var(--gs); color: var(--gn); }
 	.dd-btn-none { background: var(--rs); color: var(--rd); }
