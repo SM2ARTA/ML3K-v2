@@ -7,11 +7,15 @@
 	import { HelpDialog } from '$lib/components';
 	import { exportBackup, importBackup } from '$lib/backup';
 	import { restoreUndo, hasUndo } from '$lib/undo';
+	import { startRealtime, stopRealtime } from '$lib/realtime';
+	import { loadAIConfig } from '$lib/hs-utils';
 
 	let { children } = $props();
 	let helpOpen = $state(false);
 	let backupStatus = $state('');
 	let undoAvailable = $state(false);
+	let realtimeActive = $state(false);
+	let lastSync = $state('');
 
 	async function doUndo() {
 		const ok = await restoreUndo();
@@ -19,7 +23,6 @@
 		if (ok) window.location.reload();
 	}
 
-	// Check undo availability periodically
 	$effect(() => { undoAvailable = hasUndo(); });
 
 	async function doBackup() {
@@ -43,9 +46,18 @@
 	}
 
 	onMount(async () => {
+		// Load AI config from Supabase
+		loadAIConfig().catch(() => {});
 		try {
 			const { data, error } = await supabase.from('shared_state').select('id').limit(1);
-			if (!error) $connected = true;
+			if (!error) {
+				$connected = true;
+				// Start realtime subscriptions
+				startRealtime((payload) => {
+					lastSync = new Date().toLocaleTimeString();
+					realtimeActive = true;
+				});
+			}
 		} catch {}
 	});
 
@@ -68,13 +80,13 @@
 			<div style="display:flex;align-items:center;gap:12px">
 				<div>
 					<div style="font-size:14px;font-weight:700">
-						ML3K <span style="color:var(--ac);font-size:10px">v2</span> <span style="font-size:8px;color:var(--tt);font-weight:400">b0316v</span>
+						ML3K <span style="color:var(--ac);font-size:10px">v2</span> <span style="font-size:8px;color:var(--tt);font-weight:400">b0316w</span>
 						<span style="font-size:10px;padding:2px 6px;border-radius:4px;margin-left:4px;{$role === 'admin' ? 'background:var(--as);color:var(--ac)' : 'background:var(--bg);color:var(--ts)'}">
 							{$role === 'admin' ? 'Admin ✕' : 'Viewer'}
 						</span>
 						<span class="sb-status" class:connected={$connected} class:checking={!$connected}>
 							<span style="width:6px;height:6px;border-radius:50%;background:currentColor;display:inline-block"></span>
-							{$connected ? 'Connected' : 'Checking...'}
+							{$connected ? (realtimeActive ? 'Live' : 'Connected') : 'Checking...'}
 						</span>
 					</div>
 				</div>

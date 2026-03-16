@@ -177,6 +177,12 @@
 					</Card>
 				</div>
 
+				{#if isAdmin}
+					<div style="margin-bottom:12px">
+						<a href="/lm/upload" class="rbtn" style="text-decoration:none;font-size:10px;padding:4px 10px">📂 Upload Files</a>
+					</div>
+				{/if}
+
 				<!-- Venue table -->
 				<Card>
 					<div style="font-size:12px;font-weight:700;margin-bottom:8px">Venues by Bump-in Date</div>
@@ -272,7 +278,7 @@
 									{#each day.trucks as truck, ti}
 										<Card padding="12px">
 											<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-												<span style="font-size:13px;font-weight:700">T-{ti + 1}</span>
+												<span style="font-size:13px;font-weight:700;{truck.isCORT ? 'color:var(--rd)' : ''}">{truck.isCORT ? 'CORT' : 'T-' + (ti + 1)}</span>
 												<span style="font-size:13px;font-weight:700;font-family:var(--fm)">{truck.pallets.toFixed(1)} <span style="font-size:10px;font-weight:400;color:var(--ts)">/ {vs?.truck_capacity || 26}</span></span>
 											</div>
 											<ProgressBar value={truck.pallets} max={vs?.truck_capacity || 26} />

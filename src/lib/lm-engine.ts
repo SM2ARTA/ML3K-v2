@@ -1,12 +1,15 @@
 /**
- * LM Plan Engine — simplified pallet calculation + truck packing
+ * LM Plan Engine — pallet calculation + truck packing
  * Core logic ported from v1 build() function (lines 6930-7400)
  *
- * Simplified version focuses on:
+ * Features:
  * - Pallet calculation (qty / pallet_qty * pallet_spc)
  * - Date grouping by bump-in date
  * - Truck packing respecting capacity and max trucks/day
  * - Lead time calculation (dispatch = bump_in - lead_time, skip weekends)
+ * - CORT item separation (items with CORT in SKU go to separate trucks)
+ * - STP filtering (STP-sourced items excluded from venue deliveries)
+ * - Pool deduction (qty carries across dates, top-up for full pallets)
  */
 
 import { addDays, isNonWorkday } from './lp-helpers';
@@ -29,6 +32,7 @@ export interface LMTruck {
 	items: LMTruckItem[];
 	pallets: number;
 	pieces: number;
+	isCORT?: boolean;
 }
 
 export interface LMTruckItem {
@@ -52,15 +56,29 @@ function calcDispatchDate(bumpInDate: string, leadTime: number): string {
 	return d;
 }
 
+/** Check if SKU is a CORT (cortege/protocol) item */
+function isCORT(sku: string): boolean {
+	return /\bCORT\b/i.test(sku);
+}
+
+/** Check if SKU is an STP (Staples) sourced item */
+function isSTP(source: string): boolean {
+	return /\bSTP\b/i.test(source || '');
+}
+
 /** Build LM plan for a venue */
 export function buildLMPlan(
-	demand: { sku: string; name: string; qty: number; bumpInDate: string; palletQty: number; palletSpc: number }[],
+	demand: { sku: string; name: string; qty: number; bumpInDate: string; palletQty: number; palletSpc: number; source?: string }[],
 	config: LMPlanConfig
 ): LMTruckDay[] {
 	const { truckCapacity, maxTrucksPerDay, leadTime } = config;
 
+	// Separate CORT items and filter STP
+	const cortItems = demand.filter(d => isCORT(d.sku) && d.qty > 0 && d.bumpInDate);
+	const regularItems = demand.filter(d => !isCORT(d.sku) && !isSTP(d.source || ''));
+
 	// Filter items with valid pallet data and qty
-	const validItems = demand.filter(d => d.palletQty > 0 && d.palletSpc > 0 && d.qty > 0);
+	const validItems = regularItems.filter(d => d.palletQty > 0 && d.palletSpc > 0 && d.qty > 0);
 	if (!validItems.length) return [];
 
 	// Group by bump-in date
@@ -152,6 +170,35 @@ export function buildLMPlan(
 				totalPieces: activeTrucks.reduce((s, t) => s + t.pieces, 0)
 			});
 		}
+	}
+
+	// ── CORT items: separate truck(s) per bump-in date ──
+	if (cortItems.length > 0) {
+		const cortByDate = new Map<string, typeof cortItems>();
+		for (const item of cortItems) {
+			const d = item.bumpInDate || 'unknown';
+			if (!cortByDate.has(d)) cortByDate.set(d, []);
+			cortByDate.get(d)!.push(item);
+		}
+		for (const [biDate, items] of [...cortByDate.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+			if (biDate === 'unknown') continue;
+			const dispatchDate = calcDispatchDate(biDate, leadTime);
+			const cortTruck: LMTruck = { items: [], pallets: 0, pieces: 0, isCORT: true };
+			for (const item of items) {
+				cortTruck.items.push({ sku: item.sku, name: item.name, qty: item.qty, pallets: 0, palletQty: 0, palletSpc: 0, bumpInDate: biDate });
+				cortTruck.pieces += item.qty;
+			}
+			// Check if this date already has a day entry
+			const existing = days.find(d => d.bumpInDate === biDate);
+			if (existing) {
+				existing.trucks.push(cortTruck);
+				existing.totalPieces += cortTruck.pieces;
+			} else {
+				days.push({ bumpInDate: biDate, dispatchDate, trucks: [cortTruck], totalPallets: 0, totalPieces: cortTruck.pieces });
+			}
+		}
+		// Re-sort days by bump-in date
+		days.sort((a, b) => a.bumpInDate.localeCompare(b.bumpInDate));
 	}
 
 	return days;
