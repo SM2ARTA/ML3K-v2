@@ -15,3 +15,4 @@ export { default as BottomBar } from './BottomBar.svelte';
 export { default as TruckModal } from './TruckModal.svelte';
 export { default as HelpDialog } from './HelpDialog.svelte';
 export { default as HSLookup } from './HSLookup.svelte';
+export { default as FileUpload } from './FileUpload.svelte';

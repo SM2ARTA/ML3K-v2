@@ -349,7 +349,8 @@
 		<div class="card" style="text-align:center;padding:40px">
 			<div style="font-size:32px;margin-bottom:12px">🚛</div>
 			<div style="font-size:14px;font-weight:700;margin-bottom:6px">No Plan Generated</div>
-			<div style="font-size:12px;color:var(--ts)">Upload files and generate a plan to see truck assignments.</div>
+			<div style="font-size:12px;color:var(--ts);margin-bottom:12px">Upload files and generate a plan to see truck assignments.</div>
+			{#if isAdmin}<a href="/lp/upload" class="mbtn mbtn-primary" style="text-decoration:none">📂 Upload Files</a>{/if}
 		</div>
 	{:else}
 		{#each trucksByDate as group}
