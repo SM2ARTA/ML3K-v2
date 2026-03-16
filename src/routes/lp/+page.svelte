@@ -47,6 +47,15 @@
 	let selectedSources = $state(new Set<string>());
 	let selectedDests = $state(new Set<string>());
 	let lateExclDests = $state(new Set<string>());
+	let arrivalSearch = $state('');
+	let filteredArrivals = $derived(
+		arrivalSearch
+			? arrivals.filter(a => {
+				const q = arrivalSearch.toLowerCase();
+				return (a.sku || '').toLowerCase().includes(q) || (a.container || '').toLowerCase().includes(q) || (a.name || '').toLowerCase().includes(q) || (a.arrival_date || '').includes(q);
+			})
+			: arrivals
+	);
 
 	const lpTabs = [
 		{ id: 'demand', label: '📋 Demand' },
@@ -222,10 +231,22 @@
 	async function handleAddArrival() {
 		if (!isAdmin) return;
 		if (!newArrival.sku || !newArrival.arrival_date) return;
+		// Auto-calc ready date if not provided: arrival + turnaround days (skip weekends)
+		let readyDate = newArrival.ready_date;
+		if (!readyDate) {
+			const { addDays, isNonWorkday } = await import('$lib/lp-helpers');
+			let d = newArrival.arrival_date;
+			let remaining = settings?.turnaround || 6;
+			while (remaining > 0) { d = addDays(d, 1); if (!isNonWorkday(d)) remaining--; }
+			readyDate = d;
+		}
+		// Auto-calc pallets from nomenclature
+		const nm = nomMap[newArrival.sku];
+		const pltCalc = nm && nm.pallet_qty > 0 ? (newArrival.qty / nm.pallet_qty) * (nm.pallet_spc || 0) : 0;
 		await addManualArrival({
-			sku: newArrival.sku, name: newArrival.name, container: newArrival.container || 'MANUAL',
-			qty: newArrival.qty, arrival_date: newArrival.arrival_date, ready_date: newArrival.ready_date || newArrival.arrival_date,
-			avail_pallets: 0
+			sku: newArrival.sku, name: newArrival.name || nm?.name || '', container: newArrival.container || 'MANUAL',
+			qty: newArrival.qty, arrival_date: newArrival.arrival_date, ready_date: readyDate,
+			avail_pallets: Math.round(pltCalc * 100) / 100
 		});
 		arrivals = await getLPArrivals();
 		showAddArrival = false;
@@ -530,11 +551,58 @@
 
 {:else if activeTab === 'arrivals'}
 	<!-- Arrivals Tab -->
-	<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
-		<StatBadge label="{arrivals.length} arrival items" />
-		<StatBadge label="{arrivedConts.size} arrived" variant="green" />
+	{@const arrContainers = new Set(arrivals.map(a => a.container).filter(Boolean))}
+	{@const arrDates = new Set(arrivals.map(a => a.arrival_date).filter(Boolean))}
+	{@const arrTotalQty = arrivals.reduce((s, a) => s + (a.qty || 0), 0)}
+	{@const arrTotalPlt = arrivals.reduce((s, a) => s + (a.avail_pallets || 0), 0)}
+	{@const arrEarliestReady = arrivals.filter(a => a.ready_date).map(a => a.ready_date).sort()[0] || ''}
+
+	<!-- KPI Cards -->
+	<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin-bottom:10px">
+		<div class="card" style="padding:8px 10px;text-align:center">
+			<div style="font-size:8px;color:var(--ts);font-weight:600;text-transform:uppercase">CONTAINERS</div>
+			<div style="font-size:16px;font-weight:700;color:var(--ac)">{arrContainers.size}</div>
+		</div>
+		<div class="card" style="padding:8px 10px;text-align:center">
+			<div style="font-size:8px;color:var(--ts);font-weight:600;text-transform:uppercase">ARRIVED</div>
+			<div style="font-size:16px;font-weight:700;color:var(--gn)">{arrivedConts.size}<span style="font-size:10px;color:var(--tt)">/{arrContainers.size}</span></div>
+		</div>
+		<div class="card" style="padding:8px 10px;text-align:center">
+			<div style="font-size:8px;color:var(--ts);font-weight:600;text-transform:uppercase">SKU LINES</div>
+			<div style="font-size:16px;font-weight:700">{arrivals.length}</div>
+		</div>
+		<div class="card" style="padding:8px 10px;text-align:center">
+			<div style="font-size:8px;color:var(--ts);font-weight:600;text-transform:uppercase">PIECES</div>
+			<div style="font-size:16px;font-weight:700">{arrTotalQty.toLocaleString()}</div>
+		</div>
+		<div class="card" style="padding:8px 10px;text-align:center">
+			<div style="font-size:8px;color:var(--ts);font-weight:600;text-transform:uppercase">PALLETS</div>
+			<div style="font-size:16px;font-weight:700;color:var(--pu)">{arrTotalPlt.toFixed(1)}</div>
+		</div>
+		<div class="card" style="padding:8px 10px;text-align:center">
+			<div style="font-size:8px;color:var(--ts);font-weight:600;text-transform:uppercase">DATES</div>
+			<div style="font-size:16px;font-weight:700">{arrDates.size}</div>
+		</div>
+		<div class="card" style="padding:8px 10px;text-align:center">
+			<div style="font-size:8px;color:var(--ts);font-weight:600;text-transform:uppercase">TURNAROUND</div>
+			<div style="font-size:16px;font-weight:700">{settings?.turnaround || 6}d</div>
+		</div>
+		{#if arrEarliestReady}
+			<div class="card" style="padding:8px 10px;text-align:center">
+				<div style="font-size:8px;color:var(--ts);font-weight:600;text-transform:uppercase">EARLIEST READY</div>
+				<div style="font-size:12px;font-weight:700;font-family:var(--fm)">{arrEarliestReady}</div>
+			</div>
+		{/if}
+	</div>
+
+	<!-- Toolbar -->
+	<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
 		<StatBadge label="{arrivals.filter(a => a.is_manual).length} manual" variant="purple" />
-		<StatBadge label="{Object.keys(contOverrides).length} date overrides" variant="orange" />
+		{#if Object.keys(contOverrides).length > 0}
+			<StatBadge label="{Object.keys(contOverrides).length} date overrides" variant="orange" />
+		{/if}
+		<input type="text" bind:value={arrivalSearch} placeholder="Search container, SKU..."
+			style="padding:5px 8px;border:1px solid var(--bd);border-radius:4px;font-size:10px;outline:none;width:180px">
 		{#if isAdmin}
 			<button class="rbtn" onclick={() => showAddArrival = !showAddArrival} style="font-size:10px;padding:3px 8px;background:var(--gs);color:var(--gn);border-color:#B8DFCA">
 				{showAddArrival ? '✕ Cancel' : '+ Add Manual'}
@@ -548,9 +616,11 @@
 			<div style="font-size:11px;font-weight:700;margin-bottom:8px">Add Manual Arrival</div>
 			<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">
 				<div><label style="font-size:9px;color:var(--ts);display:block;margin-bottom:2px">SKU *</label>
-					<input type="text" bind:value={newArrival.sku} placeholder="SKU-001" style="width:100%;padding:5px 8px;border:1px solid var(--bd);border-radius:4px;font-size:11px;font-family:var(--fm);outline:none;box-sizing:border-box"></div>
-				<div><label style="font-size:9px;color:var(--ts);display:block;margin-bottom:2px">Name</label>
-					<input type="text" bind:value={newArrival.name} placeholder="Product name" style="width:100%;padding:5px 8px;border:1px solid var(--bd);border-radius:4px;font-size:11px;outline:none;box-sizing:border-box"></div>
+					<input type="text" bind:value={newArrival.sku} placeholder="SKU-001"
+						oninput={(e) => { const nm = nomMap[(e.target as HTMLInputElement).value]; if (nm) { newArrival.name = nm.name || ''; } }}
+						style="width:100%;padding:5px 8px;border:1px solid var(--bd);border-radius:4px;font-size:11px;font-family:var(--fm);outline:none;box-sizing:border-box"></div>
+				<div><label style="font-size:9px;color:var(--ts);display:block;margin-bottom:2px">Name {nomMap[newArrival.sku] ? '✓' : ''}</label>
+					<input type="text" bind:value={newArrival.name} placeholder="Product name" style="width:100%;padding:5px 8px;border:1px solid var(--bd);border-radius:4px;font-size:11px;outline:none;box-sizing:border-box;{nomMap[newArrival.sku] ? 'background:var(--gs)' : ''}"></div>
 				<div><label style="font-size:9px;color:var(--ts);display:block;margin-bottom:2px">Container</label>
 					<input type="text" bind:value={newArrival.container} placeholder="CONT-001" style="width:100%;padding:5px 8px;border:1px solid var(--bd);border-radius:4px;font-size:11px;font-family:var(--fm);outline:none;box-sizing:border-box"></div>
 				<div><label style="font-size:9px;color:var(--ts);display:block;margin-bottom:2px">Qty</label>
@@ -573,7 +643,7 @@
 				</tr>
 			</thead>
 			<tbody>
-				{#each arrivals as a}
+				{#each filteredArrivals as a}
 					{@const hasOverride = a.container && contOverrides[a.container]}
 					{@const isArrived = a.container ? arrivedConts.has(a.container) : false}
 					<tr style={isArrived ? 'background:var(--gs)' : a.is_manual ? 'background:var(--ps)' : hasOverride ? 'background:var(--os)' : ''}>
