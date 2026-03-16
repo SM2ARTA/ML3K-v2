@@ -30,7 +30,11 @@ export async function exportBackup() {
 		'lp_pallet_overrides', 'lp_container_overrides',
 		'lp_settings', 'lp_destinations',
 		'lm_nomenclature', 'lm_demand', 'lm_venue_settings',
-		'lm_dispatch', 'stock_report', 'app_settings'
+		'lm_dispatch', 'lm_excluded', 'lm_manual_items',
+		'lm_demand_adj', 'lm_nom_overrides', 'lm_manual_demand',
+		'lm_kits', 'lm_kit_items', 'lm_stp_deliveries',
+		'lm_dist_overrides', 'lm_pallet_config',
+		'stock_report', 'app_settings'
 	];
 
 	for (const table of tables) {
@@ -65,10 +69,23 @@ export async function importBackup(buf: ArrayBuffer): Promise<string[]> {
 		'lp pallet overrides': 'lp_pallet_overrides',
 		'lp settings': 'lp_settings',
 		'lp destinations': 'lp_destinations',
+		'lp container overrides': 'lp_container_overrides',
 		'lm nomenclature': 'lm_nomenclature',
 		'lm demand': 'lm_demand',
 		'lm venue settings': 'lm_venue_settings',
+		'lm dispatch': 'lm_dispatch',
+		'lm excluded': 'lm_excluded',
+		'lm manual items': 'lm_manual_items',
+		'lm demand adj': 'lm_demand_adj',
+		'lm nom overrides': 'lm_nom_overrides',
+		'lm manual demand': 'lm_manual_demand',
+		'lm kits': 'lm_kits',
+		'lm kit items': 'lm_kit_items',
+		'lm stp deliveries': 'lm_stp_deliveries',
+		'lm dist overrides': 'lm_dist_overrides',
+		'lm pallet config': 'lm_pallet_config',
 		'stock report': 'stock_report',
+		'app settings': 'app_settings',
 	};
 
 	for (const sheetName of wb.SheetNames) {

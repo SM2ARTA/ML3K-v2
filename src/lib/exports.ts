@@ -261,6 +261,61 @@ export function exportLMVenues(venueStats: any[]) {
 	XLSX.writeFile(wb, `LM-Venues-${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
 
+/** Export LM truck plan for a venue */
+export function exportLMTruckPlan(
+	plan: { bumpInDate: string; dispatchDate: string; trucks: { items: { sku: string; name: string; qty: number; pallets: number }[]; pallets: number; pieces: number; isCORT?: boolean }[]; totalPallets: number; totalPieces: number }[],
+	venue: string,
+	truckCapacity: number
+) {
+	if (!plan.length) return;
+	const wb = XLSX.utils.book_new();
+	const now = new Date().toISOString().slice(0, 10);
+
+	// Sheet 1: Truck details
+	const rows: any[] = [];
+	let truckNum = 0;
+	for (const day of plan) {
+		for (const truck of day.trucks) {
+			truckNum++;
+			const label = truck.isCORT ? 'CORT' : 'T-' + truckNum;
+			for (const item of truck.items) {
+				rows.push({
+					'Truck': label, 'Dispatch': day.dispatchDate, 'Bump-in': day.bumpInDate,
+					'SKU': item.sku, 'Name': item.name, 'Qty': item.qty,
+					'Pallets': +item.pallets.toFixed(3),
+					'CORT': truck.isCORT ? 'Yes' : ''
+				});
+			}
+		}
+	}
+	const ws = XLSX.utils.json_to_sheet(rows);
+	ws['!cols'] = [{ wch: 8 }, { wch: 12 }, { wch: 12 }, { wch: 20 }, { wch: 36 }, { wch: 10 }, { wch: 10 }, { wch: 6 }];
+	XLSX.utils.book_append_sheet(wb, ws, 'Truck Plan');
+
+	// Sheet 2: Summary
+	const summary: any[] = [];
+	truckNum = 0;
+	for (const day of plan) {
+		for (const truck of day.trucks) {
+			truckNum++;
+			summary.push({
+				'Truck': truck.isCORT ? 'CORT' : 'T-' + truckNum,
+				'Dispatch': day.dispatchDate, 'Bump-in': day.bumpInDate,
+				'Pallets': +truck.pallets.toFixed(1), 'Pieces': truck.pieces,
+				'SKUs': truck.items.length,
+				'Utilization': Math.round((truck.pallets / truckCapacity) * 100) + '%',
+				'CORT': truck.isCORT ? 'Yes' : ''
+			});
+		}
+	}
+	const ws2 = XLSX.utils.json_to_sheet(summary);
+	ws2['!cols'] = [{ wch: 8 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 6 }, { wch: 10 }, { wch: 6 }];
+	XLSX.utils.book_append_sheet(wb, ws2, 'Summary');
+
+	const safeName = venue.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 30);
+	XLSX.writeFile(wb, `LM-Trucks-${safeName}-${now}.xlsx`);
+}
+
 /** Export V26 summary */
 export function exportV26Summary(destSummary: any[], timeline: any[], stats: any) {
 	const wb = XLSX.utils.book_new();

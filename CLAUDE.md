@@ -93,16 +93,26 @@ supabase/
 ### LM Module — Last Mile
 | Feature | Status |
 |---|---|
-| Dashboard (venue stats, top venues) | ✅ Done |
-| Demand table (searchable) | ✅ Done |
-| Venues settings cards | ✅ Done |
+| Dashboard (venue stats, top venues) | ✅ Done | Delivery calendar, kits summary, STP summary |
+| Demand table (searchable) | ✅ Done | Stock qty column, demand adjustments, nom overrides |
+| Venues settings cards | ✅ Done | Edit modal: capacity, max trucks, lead time |
 | Venue sidebar with clusters | ✅ Done | Collapsible, searchable, grouped by cluster |
+| Region filter tabs (US/CAN/MEX) | ✅ Done | Sidebar + dashboard filtering by country |
 | Truck plan view | ✅ Done | LM engine: pallet calc + truck packing + date grouping |
+| Dispatch controls | ✅ Done | Toggle dispatch, date override, exclude per truck |
 | LM file upload | ✅ Done | `/lm/upload` — nom + material plan |
-| LM exports | ✅ Done | Demand + venue summary Excel |
-| Dispatch controls | ❌ Not ported |
-| Plan engine | ❌ Not ported |
-| File upload | ❌ Not ported |
+| LM exports | ✅ Done | Demand + venue summary + truck plan Excel |
+| Plan engine | ✅ Done | `lm-engine.ts` — bin-packing, CORT, STP, asm/dis |
+| Demand adjustments | ✅ Done | Inline qty edit, purple highlight, per venue/SKU |
+| Nom overrides | ✅ Done | Modal: pallet dims (dis + asm), clear override |
+| Pallet config (dis/asm) | ✅ Done | Modal: per venue type mode toggle |
+| Manual demand | ✅ Done | Add/remove manual demand entries |
+| Kit management | ✅ Done | Create/delete kits with child items |
+| STP deliveries | ✅ Done | Create/delete direct warehouse deliveries |
+| Excluded items | ✅ Done | Toggle exclude per truck fingerprint |
+| Stock qty in demand | ✅ Done | Green/red color coding from stock_report |
+| Cluster turnaround | ✅ Done | Editable in cluster trucks view |
+| Backup coverage | ✅ Done | All 14 LM tables in backup/restore |
 
 ### V26 Module — Vision 2026
 | Feature | Status |
@@ -117,7 +127,7 @@ supabase/
 ### Shared Features
 | Feature | Status |
 |---|---|
-| Backup/Restore (Excel) | ✅ Done | `backup.ts` — 17 tables to Excel, restore from Excel |
+| Backup/Restore (Excel) | ✅ Done | `backup.ts` — 27 tables to Excel, restore from Excel |
 | Help dialog | ✅ Done | `HelpDialog.svelte` — full system guide |
 | Bottom support bar | ✅ Done | `BottomBar.svelte` — context-sensitive exports |
 | Backup/Restore buttons | ✅ Done | Header — 💾 Backup, 📂 Restore |
