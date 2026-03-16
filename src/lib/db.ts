@@ -18,13 +18,23 @@ export async function getLPNomenclature() {
 
 export async function getLPDemand() {
 	// Use server-side aggregation — returns ~658 SKU rows instead of 24k demand rows
-	const { data, error } = await supabase.rpc('get_lp_demand_by_sku');
+	const { data, error } = await supabase.rpc('get_lp_demand_by_sku').limit(5000);
 	if (error) {
-		console.warn('RPC error, falling back to view:', error);
-		// Fallback to view (capped at 1000 rows)
-		const { data: fallback } = await supabase.from('v_lp_demand').select('*');
-		return fallback || [];
+		console.error('RPC get_lp_demand_by_sku failed:', error.message, error.code, error.details);
+		// Fallback: paginate the view
+		const all: any[] = [];
+		let from = 0;
+		while (true) {
+			const { data: page } = await supabase.from('v_lp_demand').select('*').range(from, from + 999);
+			if (!page || page.length === 0) break;
+			all.push(...page);
+			if (page.length < 1000) break;
+			from += 1000;
+		}
+		console.log('Fallback loaded', all.length, 'rows from v_lp_demand');
+		return all;
 	}
+	console.log('RPC returned', data?.length, 'aggregated SKU rows');
 	return data || [];
 }
 

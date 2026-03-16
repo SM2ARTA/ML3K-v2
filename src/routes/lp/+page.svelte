@@ -30,16 +30,43 @@
 	let holdSet = $derived(new Set(holds.map(h => `${h.destination}|${h.sku}`)));
 
 	// Transform raw data into display rows
-	let data = $derived<DemandRow[]>(rawDemand.map(d => ({
-		sku: d.sku, name: d.name || '', source: d.source || '',
-		totalQty: d.total_qty || 0,
-		hs_code: d.hs_code || '', country: d.country || '',
-		unit_price: d.unit_price || 0, customs_name: d.customs_name || '',
-		hs_confirmed: d.hs_confirmed || false,
-		pallet_qty: d.pallet_qty || 0, pallet_spc: d.pallet_spc || 0,
-		totalPallets: d.pallet_qty > 0 ? (d.total_qty / d.pallet_qty) * (d.pallet_spc || 0) : 0,
-		dests: d.destinations || {}
-	})));
+	// Handle both RPC format (aggregated with destinations jsonb) and view format (individual rows)
+	let data = $derived.by<DemandRow[]>(() => {
+		if (!rawDemand.length) return [];
+		// Check format: RPC returns 'destinations' jsonb, view returns individual rows with 'destination'
+		if (rawDemand[0].destinations !== undefined) {
+			// RPC format — already aggregated
+			return rawDemand.map(d => ({
+				sku: d.sku, name: d.name || '', source: d.source || '',
+				totalQty: d.total_qty || 0,
+				hs_code: d.hs_code || '', country: d.country || '',
+				unit_price: d.unit_price || 0, customs_name: d.customs_name || '',
+				hs_confirmed: d.hs_confirmed || false,
+				pallet_qty: d.pallet_qty || 0, pallet_spc: d.pallet_spc || 0,
+				totalPallets: d.pallet_qty > 0 ? (d.total_qty / d.pallet_qty) * (d.pallet_spc || 0) : 0,
+				dests: d.destinations || {}
+			}));
+		}
+		// View format — aggregate client-side
+		const map = new Map<string, DemandRow>();
+		for (const d of rawDemand) {
+			if (!map.has(d.sku)) {
+				map.set(d.sku, {
+					sku: d.sku, name: d.name || '', source: d.source || '',
+					totalQty: 0, hs_code: d.hs_code || '', country: d.country || '',
+					unit_price: d.unit_price || 0, customs_name: d.customs_name || '',
+					hs_confirmed: d.hs_confirmed || false,
+					pallet_qty: d.pallet_qty || 0, pallet_spc: d.pallet_spc || 0,
+					totalPallets: 0, dests: {}
+				});
+			}
+			const row = map.get(d.sku)!;
+			row.totalQty += d.required_qty || 0;
+			if (d.pallet_qty > 0) row.totalPallets += ((d.required_qty || 0) / d.pallet_qty) * (d.pallet_spc || 0);
+			row.dests[d.destination] = (row.dests[d.destination] || 0) + (d.required_qty || 0);
+		}
+		return [...map.values()].sort((a, b) => a.sku.localeCompare(b.sku));
+	});
 
 	let grandQty = $derived(data.reduce((s, r) => s + r.totalQty, 0));
 	let grandPlt = $derived(data.reduce((s, r) => s + r.totalPallets, 0));
