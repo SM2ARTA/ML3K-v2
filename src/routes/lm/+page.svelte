@@ -197,6 +197,31 @@
 		})
 	);
 
+	// Kit allocation map: "venue|sku" → total kit qty
+	let kitAllocMap = $derived.by(() => {
+		const m = new Map<string, number>();
+		for (const kit of kits) {
+			for (const item of (kit.items || [])) {
+				const key = kit.venue + '|' + item.sku;
+				m.set(key, (m.get(key) || 0) + item.qty);
+			}
+		}
+		return m;
+	});
+
+	// Venue CORT/STP flags for sidebar badges
+	let venueCortStp = $derived.by(() => {
+		const m = new Map<string, { cort: boolean; stp: boolean }>();
+		for (const d of demand) {
+			if (!m.has(d.venue)) m.set(d.venue, { cort: false, stp: false });
+			const v = m.get(d.venue)!;
+			const nom = nomMap[d.sku];
+			if ((d.sku || '').toUpperCase().includes('CORT') || (nom?.name || '').toUpperCase().includes('CORT')) v.cort = true;
+			if ((nom?.source || '').toUpperCase().startsWith('STP')) v.stp = true;
+		}
+		return m;
+	});
+
 	let totalVenues = $derived(filteredVenues.length);
 	let totalQty = $derived(filteredVenues.reduce((s, v) => s + v.qty, 0));
 	let totalPlt = $derived(filteredVenues.reduce((s, v) => s + v.pallets, 0));
@@ -379,6 +404,14 @@
 		stpDeliveries = await getLMStpDeliveries();
 	}
 
+	function exportStpDelivery(stpId: number) {
+		const stp = stpDeliveries.find((s: any) => s.id === stpId);
+		if (!stp) return;
+		const stpItems = demand.filter(d => d.venue === stp.venue && nomMap[d.sku]?.source?.toUpperCase().includes('STP'));
+		if (!stpItems.length) return;
+		exportLMDemand(stpItems, nomMap);
+	}
+
 	// ── Excluded ──
 	async function toggleExclude(itemId: string) {
 		if (excluded.has(itemId)) {
@@ -454,9 +487,10 @@
 							<div style="font-size:9px;color:var(--tt)">{cl.venues.length}v · {cl.totalPlt.toFixed(0)} plt</div>
 						</div>
 						{#each clVenues as v}
+							{@const csFlags = venueCortStp.get(v.venue)}
 							<div class="vi venue-item" class:selected={selectedVenue === v.venue}
 								onclick={() => selectVenue(v.venue)}>
-								<div style="font-size:10px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{v.venue}</div>
+								<div style="font-size:10px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{v.venue}{#if csFlags?.cort} <span style="font-size:7px;background:var(--rs);color:var(--rd);padding:0 3px;border-radius:2px;font-weight:700">CORT</span>{/if}{#if csFlags?.stp} <span style="font-size:7px;background:var(--os);color:var(--or);padding:0 3px;border-radius:2px;font-weight:700">STP</span>{/if}</div>
 								<div style="font-size:9px;color:var(--tt)">{v.pallets.toFixed(1)} plt · {v.qty.toLocaleString()} pcs{v.earliestBI ? ' · ' + v.earliestBI : ''}</div>
 							</div>
 						{/each}
@@ -573,6 +607,7 @@
 							{#each stpDeliveries as stp}
 								<div style="padding:6px 10px;border:1px solid var(--bd);border-radius:6px;font-size:10px;background:var(--os);display:flex;gap:8px;align-items:center">
 									<span><b>{stp.venue}</b> — {stp.delivery_date || '—'}{stp.rate ? ' · $' + stp.rate : ''}</span>
+									<button onclick={() => exportStpDelivery(stp.id)} style="font-size:9px;background:none;border:none;cursor:pointer;color:var(--ac)" title="Export STP delivery">⬇</button>
 									{#if isAdmin}<button onclick={() => deleteStp(stp.id)} style="font-size:10px;background:none;border:none;cursor:pointer;color:var(--rd)" title="Delete STP">✕</button>{/if}
 								</div>
 							{/each}
@@ -637,10 +672,12 @@
 								{@const ep = effPallet(d.sku, d.venue_type || '')}
 								{@const plt = ep.pq > 0 ? (q / ep.pq) * (ep.ps || 0) : 0}
 								{@const sq = stockQtys[d.sku]}
-								<tr style={hasAdj ? 'background:var(--ps)' : ''}>
+								{@const kitQty = kitAllocMap.get(d.venue + '|' + d.sku)}
+								{@const isStp = nom?.source?.toUpperCase().startsWith('STP')}
+								<tr style="{hasAdj ? 'background:var(--ps)' : ''}{isStp ? ';opacity:0.6' : ''}">
 									<td style="font-weight:600;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{d.venue}</td>
 									<td class="mono" style="font-size:10px">{d.sku}</td>
-									<td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{nom?.name || d.sku}</td>
+									<td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{nom?.name || d.sku}{#if isStp} <span style="font-size:8px" title="STP sourced">🏪</span>{/if}{#if kitQty} <span style="font-size:8px;background:var(--ps);color:var(--pu);padding:0 3px;border-radius:2px" title="{kitQty} allocated to kit">📦{kitQty}</span>{/if}</td>
 									<td class="mono" style={hasAdj ? 'text-decoration:line-through;color:var(--tt)' : 'font-weight:700'}>{(d.required_qty || 0).toLocaleString()}</td>
 									{#if isAdmin}
 										<td>
@@ -715,6 +752,10 @@
 													<input type="checkbox" checked={disp?.dispatched || false} onchange={(e) => toggleDispatch(fp, (e.target as HTMLInputElement).checked)} />
 													{disp?.dispatched ? '✅ Dispatched' : 'Dispatch'}
 												</label>
+												<input type="number" value={distOverrides[fp] || ''} placeholder="Rate" step="0.01"
+													style="width:50px;font-size:9px;padding:1px 3px;border:1px solid var(--bd);border-radius:3px;{distOverrides[fp] ? 'background:var(--ps);border-color:var(--pu)' : ''}"
+													onchange={(e) => { const v = parseFloat((e.target as HTMLInputElement).value); if (v > 0) { upsertLMDistOverride(fp, v); distOverrides[fp] = v; } else { removeLMDistOverride(fp); delete distOverrides[fp]; } distOverrides = {...distOverrides}; }}
+													title="Rate override ($)" />
 											</div>
 										{/if}
 										<div style="margin-top:4px;max-height:120px;overflow-y:auto">
@@ -778,6 +819,10 @@
 														onchange={(e) => setDateOverride(fp, (e.target as HTMLInputElement).value)} title="Override dispatch date" />
 													<button onclick={() => toggleExclude(fp)} style="font-size:9px;background:none;border:1px solid var(--bd);border-radius:3px;padding:1px 4px;cursor:pointer;{excluded.has(fp) ? 'background:var(--rs);color:var(--rd)' : ''}"
 														title={excluded.has(fp) ? 'Excluded — click to include' : 'Click to exclude'}>{excluded.has(fp) ? '👁‍🗨 Excl' : '👁'}</button>
+													<input type="number" value={distOverrides[fp] || ''} placeholder="Rate" step="0.01"
+														style="width:50px;font-size:9px;padding:1px 3px;border:1px solid var(--bd);border-radius:3px;{distOverrides[fp] ? 'background:var(--ps);border-color:var(--pu)' : ''}"
+														onchange={(e) => { const v = parseFloat((e.target as HTMLInputElement).value); if (v > 0) { upsertLMDistOverride(fp, v); distOverrides[fp] = v; } else { removeLMDistOverride(fp); delete distOverrides[fp]; } distOverrides = {...distOverrides}; }}
+														title="Rate override ($)" />
 												</div>
 											{/if}
 											<div style="margin-top:6px;max-height:150px;overflow-y:auto">

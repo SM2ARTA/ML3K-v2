@@ -468,9 +468,49 @@
 	</div>
 {:else if activeTab === 'plan'}
 	<!-- Plan Tab — Truck Cards -->
+	{@const planTotalPlt = trucks.reduce((s,t) => s + t.totalPallets, 0)}
+	{@const planTotalQty = trucks.reduce((s,t) => s + t.totalQty, 0)}
+	{@const planLocked = trucks.filter(t => t.dispatched).length}
+	{@const planDests = new Set(trucks.map(t => t.destination).filter(Boolean)).size}
+	{@const planDates = new Set(trucks.map(t => t.date).filter(Boolean)).size}
+	{@const planAvgUtil = trucks.length > 0 ? trucks.reduce((s,t) => s + t.totalPallets / (settings.max_pallets || 26) * 100, 0) / trucks.length : 0}
+	{@const planPeakDay = trucksByDate.length > 0 ? Math.max(...trucksByDate.map(g => g.trucks.length)) : 0}
+
+	<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;margin-bottom:10px">
+		<div class="card" style="padding:8px 10px;text-align:center">
+			<div style="font-size:22px;font-weight:700;color:var(--ac)">{trucks.length}</div>
+			<div style="font-size:8px;color:var(--ts);font-weight:600">Total Trucks</div>
+		</div>
+		<div class="card" style="padding:8px 10px;text-align:center">
+			<div style="font-size:22px;font-weight:700;color:var(--gn)">{planLocked}</div>
+			<div style="font-size:8px;color:var(--ts);font-weight:600">Locked</div>
+		</div>
+		<div class="card" style="padding:8px 10px;text-align:center">
+			<div style="font-size:22px;font-weight:700">{planDests}</div>
+			<div style="font-size:8px;color:var(--ts);font-weight:600">Destinations</div>
+		</div>
+		<div class="card" style="padding:8px 10px;text-align:center">
+			<div style="font-size:22px;font-weight:700">{planDates}</div>
+			<div style="font-size:8px;color:var(--ts);font-weight:600">Dispatch Days</div>
+		</div>
+		<div class="card" style="padding:8px 10px;text-align:center">
+			<div style="font-size:22px;font-weight:700;color:var(--pu)">{planTotalPlt.toFixed(1)}</div>
+			<div style="font-size:8px;color:var(--ts);font-weight:600">Pallets</div>
+		</div>
+		<div class="card" style="padding:8px 10px;text-align:center">
+			<div style="font-size:22px;font-weight:700">{planTotalQty.toLocaleString()}</div>
+			<div style="font-size:8px;color:var(--ts);font-weight:600">Pieces</div>
+		</div>
+		<div class="card" style="padding:8px 10px;text-align:center">
+			<div style="font-size:22px;font-weight:700;color:{planAvgUtil > 80 ? 'var(--gn)' : planAvgUtil > 50 ? 'var(--or)' : 'var(--rd)'}">{planAvgUtil.toFixed(0)}%</div>
+			<div style="font-size:8px;color:var(--ts);font-weight:600">Avg Utilization</div>
+		</div>
+		<div class="card" style="padding:8px 10px;text-align:center">
+			<div style="font-size:22px;font-weight:700">{planPeakDay}</div>
+			<div style="font-size:8px;color:var(--ts);font-weight:600">Peak / Day</div>
+		</div>
+	</div>
 	<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
-		<StatBadge label="{trucks.length} trucks · {trucks.reduce((s,t) => s + t.totalQty, 0).toLocaleString()} pcs · {trucks.reduce((s,t) => s + t.totalPallets, 0).toFixed(1)} plt" />
-		<StatBadge label="🔒 {trucks.filter(t => t.dispatched).length} locked" variant="green" />
 		{#if isAdmin}
 			<button class="rbtn" onclick={handleRegenerate} disabled={regenerating}
 				style="font-size:10px;padding:3px 10px;background:var(--as);color:var(--ac);border-color:var(--ab)">

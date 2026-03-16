@@ -19,5 +19,5 @@
 		display: inline-block; padding: 1px 6px; margin: 1px; border-radius: 4px;
 		font-size: 9px; font-weight: 600; border: 1px solid; white-space: nowrap;
 	}
-	.held { opacity: .3; text-decoration: line-through; }
+	.held { text-decoration: line-through; background: var(--os) !important; color: var(--or) !important; border-color: #F5D6B8 !important; opacity: .65; }
 </style>
