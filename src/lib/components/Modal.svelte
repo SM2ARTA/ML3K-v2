@@ -6,7 +6,10 @@
 
 	function close() { open = false; }
 	function onOverlayClick(e: MouseEvent) { if (e.target === e.currentTarget) close(); }
+	function onKeydown(e: KeyboardEvent) { if (open && e.key === 'Escape') { open = false; } }
 </script>
+
+<svelte:window onkeydown={onKeydown} />
 
 {#if open}
 	<div class="modal-overlay" onclick={onOverlayClick}>

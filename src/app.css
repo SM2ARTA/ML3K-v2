@@ -190,6 +190,12 @@ body {
 }
 @keyframes sp { to { transform: rotate(360deg); } }
 
+/* ── Custom Scrollbar ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--bd); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: var(--tt); }
+
 /* ── Mobile Responsive ── */
 @media (max-width: 768px) {
 	.app-header { padding: 8px 12px; flex-wrap: wrap; gap: 6px; }

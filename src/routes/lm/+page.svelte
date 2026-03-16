@@ -40,6 +40,7 @@
 	let loadError = $state('');
 	let activeTab = $state('dashboard');
 	let searchText = $state('');
+	let demandSearch = $state('');
 	let selectedVenue = $state('');
 	let selectedCluster = $state('');
 	let sidebarOpen = $state(true);
@@ -49,7 +50,7 @@
 	// Modals
 	let showVenueSettingsModal = $state(false);
 	let editingVenue = $state('');
-	let vsForm = $state({ truck_capacity: 26, max_trucks: 2, lead_time: 3 });
+	let vsForm = $state({ truck_capacity: 26, max_trucks: 2, lead_time: 3, bump_in_date: '' });
 	let showAddDemandModal = $state(false);
 	let addDemandForm = $state({ venue: '', sku: '', name: '', source: '', qty: 0, bumpInDate: '' });
 	let showKitModal = $state(false);
@@ -185,6 +186,13 @@
 		let base = demand;
 		if (selectedVenue) base = base.filter(d => d.venue === selectedVenue);
 		else if (selectedCluster) base = base.filter(d => (d.venue_cluster || '') === selectedCluster);
+		if (demandSearch) {
+			const q = demandSearch.toLowerCase();
+			base = base.filter(d => {
+				const nm = nomMap[d.sku]?.name || '';
+				return d.sku.toLowerCase().includes(q) || d.venue.toLowerCase().includes(q) || nm.toLowerCase().includes(q);
+			});
+		}
 		return base;
 	});
 
@@ -290,7 +298,7 @@
 	function openVenueSettings(venue: string) {
 		editingVenue = venue;
 		const vs = vsMap[venue];
-		vsForm = { truck_capacity: vs?.truck_capacity ?? 26, max_trucks: vs?.max_trucks ?? 2, lead_time: vs?.lead_time ?? 3 };
+		vsForm = { truck_capacity: vs?.truck_capacity ?? 26, max_trucks: vs?.max_trucks ?? 2, lead_time: vs?.lead_time ?? 3, bump_in_date: vs?.bump_in_date || '' };
 		showVenueSettingsModal = true;
 	}
 	async function saveVenueSettings() {
@@ -646,6 +654,8 @@
 			<!-- ════ DEMAND ════ -->
 			{:else if activeTab === 'demand'}
 				<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+					<input type="text" bind:value={demandSearch} placeholder="Search SKU, venue, name..."
+						style="padding:5px 8px;border:1px solid var(--bd);border-radius:4px;font-size:10px;outline:none;width:200px;font-family:var(--fd)" />
 					<StatBadge label="{filteredDemand.length} rows · {filteredDemand.reduce((s, d) => s + effQty(d.venue, d.sku, d.required_qty || 0), 0).toLocaleString()} pcs" />
 					{#if selectedVenue}<StatBadge label="{selectedVenue}" variant="purple" />{/if}
 					{#if isAdmin}
@@ -884,6 +894,9 @@
 				<label>Lead Time (days)
 					<input type="number" bind:value={vsForm.lead_time} min="0" max="30" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:6px;font-size:12px;margin-top:4px;box-sizing:border-box" />
 				</label>
+				<label>Bump-in Date
+					<input type="date" bind:value={vsForm.bump_in_date} style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:6px;font-size:12px;margin-top:4px;box-sizing:border-box" />
+				</label>
 				<div style="display:flex;gap:8px;justify-content:flex-end">
 					<button class="mbtn" onclick={() => showVenueSettingsModal = false}>Cancel</button>
 					<button class="mbtn mbtn-primary" onclick={saveVenueSettings}>Save</button>
@@ -1022,10 +1035,16 @@
 	{#if showTruckModal && modalTruck}
 		<Modal title="{modalTruck.isCORT ? 'CORT' : 'Truck'} — {modalDay?.dispatchDate} → {modalDay?.bumpInDate}" bind:open={showTruckModal}>
 			<div style="font-size:12px">
-				<div style="display:flex;gap:12px;margin-bottom:12px">
+				<div style="display:flex;gap:12px;margin-bottom:12px;align-items:center">
 					<div><span style="color:var(--ts)">Pallets:</span> <b>{modalTruck.pallets.toFixed(1)}</b></div>
 					<div><span style="color:var(--ts)">Pieces:</span> <b>{modalTruck.pieces.toLocaleString()}</b></div>
 					<div><span style="color:var(--ts)">SKUs:</span> <b>{modalTruck.items.length}</b></div>
+					{#if modalDay}
+						<button class="rbtn" style="font-size:10px;padding:3px 8px;background:var(--as);color:var(--ac);border-color:var(--ab)"
+							onclick={() => exportLMTruckPlan([{ ...modalDay, trucks: [modalTruck] }], selectedVenue || selectedCluster || 'Truck', vsMap[selectedVenue]?.truck_capacity || 26)}>
+							⬇ Export
+						</button>
+					{/if}
 				</div>
 				<table class="dtb">
 					<thead><tr><th>SKU</th><th>Name</th><th>Qty</th><th>Pallets</th></tr></thead>

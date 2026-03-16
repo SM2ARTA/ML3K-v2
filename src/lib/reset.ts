@@ -62,6 +62,8 @@ const SHARED_TABLES = [
 /** System Reset — clears EVERYTHING, all modules, all data */
 export async function doSystemReset(): Promise<void> {
 	await clearTables([...LP_TABLES, ...LP_SETTINGS_TABLES, ...LM_TABLES, ...SHARED_TABLES]);
+	// Clear hs-ai-config from app_settings
+	await supabase.from('app_settings').delete().eq('key', 'ai_config');
 	// Re-insert LP defaults
 	await resetLPDefaults();
 }
