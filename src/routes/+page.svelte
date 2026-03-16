@@ -151,19 +151,18 @@
 						<tr><th>Metric</th><th>v1 (shared_state)</th><th>v2 (tables)</th><th>Match</th></tr>
 					</thead>
 					<tbody>
-						{@const checks = [
+						{#each [
 							['LP SKUs', v1Stats.skus, v2Stats?.lp?.skus],
 							['LP Demand rows', v1Stats.demand, v2Stats?.lp?.demandRows],
 							['LP Plan rows', v1Stats.plan, v2Stats?.lp?.planRows],
 							['LP Customs overrides', v1Stats.customs, v2Stats?.lp?.customsOverrides],
 							['LP Holds', v1Stats.holds, v2Stats?.lp?.holds]
-						]}
-						{#each checks as [label, v1, v2]}
+						] as [label, v1val, v2val]}
 							<tr>
 								<td>{label}</td>
-								<td class="mono">{v1}</td>
-								<td class="mono">{v2 ?? '—'}</td>
-								<td>{v1 === v2 ? '✅' : '⚠️'}</td>
+								<td class="mono">{v1val}</td>
+								<td class="mono">{v2val ?? '—'}</td>
+								<td>{v1val === v2val ? '✅' : '⚠️'}</td>
 							</tr>
 						{/each}
 					</tbody>
