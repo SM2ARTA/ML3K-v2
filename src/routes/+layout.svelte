@@ -3,6 +3,7 @@
 	import { role, activeModule, connected } from '$lib/stores';
 	import { supabase } from '$lib/supabase';
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 
 	let { children } = $props();
 
@@ -15,6 +16,10 @@
 
 	function switchModule(mod: 'v26' | 'lp' | 'lm') {
 		$activeModule = mod;
+		if (mod === 'lp') goto('/lp');
+		else if (mod === 'lm') goto('/lm');
+		else if (mod === 'v26') goto('/v26');
+		else goto('/');
 	}
 </script>
 
@@ -28,7 +33,7 @@
 			<div style="display:flex;align-items:center;gap:12px">
 				<div>
 					<div style="font-size:14px;font-weight:700">
-						ML3K
+						ML3K <span style="color:var(--ac);font-size:10px">v2</span>
 						<span style="font-size:10px;padding:2px 6px;border-radius:4px;margin-left:4px;{$role === 'admin' ? 'background:var(--as);color:var(--ac)' : 'background:var(--bg);color:var(--ts)'}">
 							{$role === 'admin' ? 'Admin ✕' : 'Viewer'}
 						</span>
