@@ -3,7 +3,7 @@
 	import { getLPDemand, getLPHolds, getLPTruckSummary, getLPPlan, getLPDestinations, getLPTruckDispatch, getLPArrivals, getStockReport, getLPSettings, getLPNomenclature, getLPCustomsOverrides, updateCustomsOverride, toggleHSConfirm, updateTruckDispatch, saveLSR, holdBySource, getLPDemandForHolds, updateLPSettings, updateDestination, upsertContainerOverride, getContainerOverrides, addManualArrival, deleteArrival, upsertPalletOverride, getArrivedContainers, toggleContainerArrived } from '$lib/db';
 	import { role } from '$lib/stores';
 	import { supabase } from '$lib/supabase';
-	import { TabBar, StatBadge, Spinner, SearchInput, FilterDropdown, DestBadge, EditableCell, ConfirmButton, TruckCard, HoldBar, BottomBar, TruckModal, HSLookup, CombinedCIModal, NomUpdateModal } from '$lib/components';
+	import { TabBar, StatBadge, Spinner, SearchInput, FilterDropdown, DestBadge, EditableCell, ConfirmButton, TruckCard, HoldBar, BottomBar, TruckModal, HSLookup, CombinedCIModal, NomUpdateModal, Modal } from '$lib/components';
 	import { fmtDate } from '$lib/utils';
 	import { captureUndo } from '$lib/undo';
 	import { exportLPPlan, exportLPDemand, exportLPArrivals, exportCI } from '$lib/exports';
@@ -48,6 +48,8 @@
 	let selectedDests = $state(new Set<string>());
 	let lateExclDests = $state(new Set<string>());
 	let arrivalSearch = $state('');
+	let contModalOpen = $state(false);
+	let contModalData = $state<any>(null);
 	let filteredArrivals = $derived(
 		arrivalSearch
 			? arrivals.filter(a => {
@@ -676,7 +678,7 @@
 				{@const hasOverride = contOverrides[g.container]}
 				{@const isArrived = arrivedConts.has(g.container)}
 				{@const pctFull = g.totalPlt > 0 ? Math.min(100, (g.totalPlt / 26) * 100) : 0}
-				<div style="background:var(--sf);border:1.5px solid {hasOverride ? 'var(--pu)' : isArrived ? 'var(--gn)' : color + '44'};border-radius:var(--r);padding:10px;{hasOverride ? 'box-shadow:0 0 0 1px var(--pu)' : ''}{isArrived ? 'opacity:.75' : ''}">
+				<div style="background:var(--sf);border:1.5px solid {hasOverride ? 'var(--pu)' : isArrived ? 'var(--gn)' : color + '44'};border-radius:var(--r);padding:10px;cursor:pointer;{hasOverride ? 'box-shadow:0 0 0 1px var(--pu)' : ''}{isArrived ? 'opacity:.75' : ''}" onclick={() => { contModalData = g; contModalOpen = true; }}>
 					<!-- Header -->
 					<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
 						<span style="width:8px;height:8px;border-radius:50%;background:{color};flex-shrink:0"></span>
@@ -964,6 +966,53 @@
 
 <!-- Truck Detail Modal -->
 <TruckModal bind:open={truckModalOpen} truckId={selectedTruckId} {planRows} {truckDispatch} maxPallets={settings.max_pallets} nomenclature={nomMap} customsOverrides={custOvrMap} />
+
+<!-- Container Detail Modal -->
+{#if contModalData}
+	<Modal title="{contModalData.isLocal ? '🚚 Local Delivery' : '📦'} {contModalData.container}" bind:open={contModalOpen}>
+		<div style="font-size:12px">
+			<!-- Dates -->
+			<div style="display:flex;gap:16px;margin-bottom:10px;color:var(--ts);font-size:11px">
+				<div>📅 Arrival: <b>{contOverrides[contModalData.container] || contModalData.arrDate || '—'}</b></div>
+				<div>✅ Ready: <b>{contModalData.readyDate || '—'}</b> <span style="color:var(--tt)">(+{settings?.turnaround || 6}d)</span></div>
+			</div>
+			<!-- KPI -->
+			<div style="display:flex;gap:16px;margin-bottom:12px">
+				<div><span style="color:var(--ts)">SKUs:</span> <b>{contModalData.skus.size}</b></div>
+				<div><span style="color:var(--ts)">Pieces:</span> <b>{contModalData.totalQty.toLocaleString()}</b></div>
+				<div><span style="color:var(--ts)">Pallets:</span> <b style="color:var(--pu)">{contModalData.totalPlt.toFixed(1)}</b></div>
+			</div>
+			<!-- Items table -->
+			<div style="overflow-x:auto;max-height:400px;overflow-y:auto">
+				<table class="dtb">
+					<thead style="position:sticky;top:0;background:var(--sf)">
+						<tr><th>SKU</th><th>Name</th><th>Source</th><th>Qty</th><th>Pallets</th>{#if isAdmin}<th></th>{/if}</tr>
+					</thead>
+					<tbody>
+						{#each contModalData.items as item}
+							{@const nm = nomMap[item.sku]}
+							<tr style={item.is_manual ? 'background:var(--ps)' : ''}>
+								<td class="mono" style="font-weight:600;font-size:10px">{item.sku}</td>
+								<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{nm?.name || item.name || '—'}</td>
+								<td style="font-size:10px;color:var(--ts)">{nm?.source || '—'}</td>
+								<td class="mono fw7">{(item.qty || 0).toLocaleString()}</td>
+								<td class="mono">{item.avail_pallets ? item.avail_pallets.toFixed(2) : '—'}</td>
+								{#if isAdmin}
+									<td>
+										{#if item.is_manual}
+											<button onclick={() => { handleDeleteArrival(item.id); contModalData.items = contModalData.items.filter((i: any) => i.id !== item.id); }}
+												style="background:none;border:none;cursor:pointer;color:var(--rd);font-size:11px" title="Delete">✕</button>
+										{/if}
+									</td>
+								{/if}
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+		</div>
+	</Modal>
+{/if}
 
 <!-- Bottom Bar -->
 {#if !loading}
