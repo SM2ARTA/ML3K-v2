@@ -224,3 +224,63 @@ export function exportLPArrivals(arrivals: any[]) {
 	XLSX.utils.book_append_sheet(wb, ws, 'Arrivals');
 	XLSX.writeFile(wb, `LP-Arrivals-${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
+
+// ── LM Exports ──
+
+/** Export LM demand data */
+export function exportLMDemand(demand: any[], nomMap: Record<string, any>) {
+	if (!demand.length) return;
+	const wb = XLSX.utils.book_new();
+	const rows = demand.map(d => {
+		const nom = nomMap[d.sku] || {};
+		return {
+			'Venue': d.venue, 'SKU': d.sku, 'Name': nom.name || d.sku,
+			'Qty': d.required_qty || 0, 'Bump-in Date': d.bump_in_date || '',
+			'Cluster': d.venue_cluster || '', 'Type': d.venue_type || '',
+			'Source': nom.source || '', 'Pallet Qty': nom.pallet_qty || '', 'Pallet Spc': nom.pallet_spc || ''
+		};
+	});
+	const ws = XLSX.utils.json_to_sheet(rows);
+	ws['!cols'] = [{ wch: 24 }, { wch: 20 }, { wch: 36 }, { wch: 10 }, { wch: 14 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 8 }, { wch: 8 }];
+	XLSX.utils.book_append_sheet(wb, ws, 'LM Demand');
+	XLSX.writeFile(wb, `LM-Demand-${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+/** Export LM venue summary */
+export function exportLMVenues(venueStats: any[]) {
+	if (!venueStats.length) return;
+	const wb = XLSX.utils.book_new();
+	const rows = venueStats.map(v => ({
+		'Venue': v.venue, 'Cluster': v.cluster, 'Type': v.venueType,
+		'SKUs': v.skuCount, 'Total Qty': v.qty, 'Pallets': +v.pallets.toFixed(1),
+		'Earliest Bump-in': v.earliestBI || ''
+	}));
+	const ws = XLSX.utils.json_to_sheet(rows);
+	ws['!cols'] = [{ wch: 24 }, { wch: 16 }, { wch: 10 }, { wch: 6 }, { wch: 10 }, { wch: 8 }, { wch: 14 }];
+	XLSX.utils.book_append_sheet(wb, ws, 'LM Venues');
+	XLSX.writeFile(wb, `LM-Venues-${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+/** Export V26 summary */
+export function exportV26Summary(destSummary: any[], timeline: any[], stats: any) {
+	const wb = XLSX.utils.book_new();
+	// Dest breakdown
+	if (destSummary.length) {
+		const rows = destSummary.map(d => ({
+			'Destination': d.dest, 'Trucks': d.trucks, 'Pallets': +d.pallets.toFixed(1),
+			'Pieces': d.qty, 'Dispatched': d.dispatched
+		}));
+		const ws = XLSX.utils.json_to_sheet(rows);
+		XLSX.utils.book_append_sheet(wb, ws, 'By Destination');
+	}
+	// Timeline
+	if (timeline.length) {
+		const rows = timeline.map(d => ({
+			'Date': d.date, 'Trucks': d.trucks, 'Pallets': +d.pallets.toFixed(1),
+			'Pieces': d.qty, 'Dispatched': d.dispatched
+		}));
+		const ws = XLSX.utils.json_to_sheet(rows);
+		XLSX.utils.book_append_sheet(wb, ws, 'Timeline');
+	}
+	XLSX.writeFile(wb, `V26-Summary-${new Date().toISOString().slice(0, 10)}.xlsx`);
+}

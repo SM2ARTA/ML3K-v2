@@ -2,8 +2,9 @@
 	import { onMount } from 'svelte';
 	import { getLMNomenclature, getLMDemand, getLMVenueSettings } from '$lib/db';
 	import { role } from '$lib/stores';
-	import { TabBar, StatBadge, Spinner, SearchInput, Card, ProgressBar, TruckCard } from '$lib/components';
+	import { TabBar, StatBadge, Spinner, SearchInput, Card, ProgressBar, TruckCard, BottomBar } from '$lib/components';
 	import { buildLMPlan, type LMTruckDay } from '$lib/lm-engine';
+	import { exportLMDemand, exportLMVenues } from '$lib/exports';
 
 	let noms = $state<any[]>([]);
 	let demand = $state<any[]>([]);
@@ -300,6 +301,18 @@
 			{/if}
 		</div>
 	</div>
+
+	<!-- Bottom Bar -->
+	<BottomBar>
+		{#if activeTab === 'demand' && filteredDemand.length}
+			<button class="rbtn" style="background:var(--as);color:var(--ac);border-color:var(--ab)"
+				onclick={() => exportLMDemand(filteredDemand, nomMap)}>⬇ Export Demand</button>
+		{/if}
+		{#if activeTab === 'dashboard' && venueStats.length}
+			<button class="rbtn" style="background:var(--as);color:var(--ac);border-color:var(--ab)"
+				onclick={() => exportLMVenues(venueStats)}>⬇ Export Venues</button>
+		{/if}
+	</BottomBar>
 {/if}
 
 <style>

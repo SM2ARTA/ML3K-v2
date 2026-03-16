@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { getSystemStats, getLPTruckSummary, getLPDestinations } from '$lib/db';
-	import { StatBadge, Spinner, Card, ProgressBar } from '$lib/components';
+	import { StatBadge, Spinner, Card, ProgressBar, DispatchChart, BottomBar } from '$lib/components';
+	import { exportV26Summary } from '$lib/exports';
 	import { destColor } from '$lib/utils';
 
 	let stats = $state<any>(null);
@@ -78,6 +79,14 @@
 			</Card>
 		</div>
 
+		<!-- Dispatch Volume Chart -->
+		{#if timeline.length > 0}
+			<Card>
+				<div style="font-size:14px;font-weight:700;margin-bottom:8px">📊 Dispatch Volume</div>
+				<DispatchChart data={timeline} />
+			</Card>
+		{/if}
+
 		<!-- Destination Breakdown -->
 		<Card>
 			<div style="font-size:14px;font-weight:700;margin-bottom:12px">🌍 Dispatch by Destination</div>
@@ -151,4 +160,9 @@
 			</Card>
 		</div>
 	</div>
+
+	<BottomBar>
+		<button class="rbtn" style="background:var(--as);color:var(--ac);border-color:var(--ab)"
+			onclick={() => exportV26Summary(destSummary, timeline, stats)}>⬇ Export V26</button>
+	</BottomBar>
 {/if}

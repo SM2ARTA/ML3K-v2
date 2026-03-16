@@ -18,3 +18,4 @@ export { default as HSLookup } from './HSLookup.svelte';
 export { default as FileUpload } from './FileUpload.svelte';
 export { default as CombinedCIModal } from './CombinedCIModal.svelte';
 export { default as NomUpdateModal } from './NomUpdateModal.svelte';
+export { default as DispatchChart } from './DispatchChart.svelte';
