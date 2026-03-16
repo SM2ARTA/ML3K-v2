@@ -455,6 +455,19 @@ export async function getStockQtyMap(): Promise<Record<string, number>> {
 	return map;
 }
 
+/** Upload stock report — replaces all rows in stock_report */
+export async function uploadStockReport(items: { sku: string; qty: number; report_name?: string }[]) {
+	// Clear existing
+	await supabase.from('stock_report').delete().neq('sku', '___never___');
+	// Insert in batches
+	for (let i = 0; i < items.length; i += 500) {
+		const batch = items.slice(i, i + 500);
+		const { error } = await supabase.from('stock_report').insert(batch);
+		if (error) throw new Error('stock_report insert: ' + error.message);
+	}
+	return items.length;
+}
+
 // ── Real-time subscriptions ──
 
 export function subscribeToTable(table: string, callback: (payload: any) => void) {

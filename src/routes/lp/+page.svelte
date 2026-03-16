@@ -6,7 +6,7 @@
 	import { TabBar, StatBadge, Spinner, SearchInput, FilterDropdown, DestBadge, EditableCell, ConfirmButton, TruckCard, HoldBar, BottomBar, TruckModal, HSLookup, CombinedCIModal, NomUpdateModal } from '$lib/components';
 	import { fmtDate } from '$lib/utils';
 	import { captureUndo } from '$lib/undo';
-	import { exportLPPlan, exportLPDemand, exportLPArrivals } from '$lib/exports';
+	import { exportLPPlan, exportLPDemand, exportLPArrivals, exportCI } from '$lib/exports';
 	import { buildLoadPlan } from '$lib/lp-engine';
 	import { createSvelteTable, type ColumnDef, type SortingState } from '$lib/table.svelte';
 	import { getCoreRowModel, getSortedRowModel, getFilteredRowModel } from '@tanstack/table-core';
@@ -316,6 +316,13 @@
 		if (!isAdmin) return;
 		await toggleHSConfirm(sku, !current);
 		rawDemand = await getLPDemand();
+	}
+
+	function exportAllCI() {
+		const truckIds = [...new Set(planRows.map(r => r.truck_id))];
+		for (const tid of truckIds) {
+			exportCI(tid, planRows, nomMap, custOvrMap);
+		}
 	}
 
 	function sortIcon(colId: string): string {
@@ -832,6 +839,8 @@
 		{#if activeTab === 'plan' && planRows.length}
 			<button class="rbtn" style="background:var(--as);color:var(--ac);border-color:var(--ab)"
 				onclick={() => exportLPPlan(planRows, truckDispatch, destinations, 26)}>⬇ Export Plan</button>
+			<button class="rbtn" style="background:var(--ps);color:var(--pu);border-color:#D4C5FE"
+				onclick={exportAllCI}>📄 All CIs</button>
 		{/if}
 		{#if activeTab === 'arrivals' && arrivals.length}
 			<button class="rbtn" style="background:var(--as);color:var(--ac);border-color:var(--ab)"

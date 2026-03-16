@@ -60,6 +60,9 @@
 	let nomOvrSku = $state('');
 	let nomOvrForm = $state({ pallet_qty: 0, pallet_spc: 0, pallet_qty_asm: 0, pallet_spc_asm: 0 });
 	let showPalletCfgModal = $state(false);
+	let showTruckModal = $state(false);
+	let modalTruck = $state<any>(null);
+	let modalDay = $state<any>(null);
 
 	const lmTabs = [
 		{ id: 'dashboard', label: '📊 Dashboard' },
@@ -244,6 +247,12 @@
 	let vsMap = $derived(Object.fromEntries(venueSettings.map(v => [v.venue, v])));
 
 	// ── Venue Settings ──
+	function openTruckDetail(day: any, truck: any) {
+		modalDay = day;
+		modalTruck = truck;
+		showTruckModal = true;
+	}
+
 	function openVenueSettings(venue: string) {
 		editingVenue = venue;
 		const vs = vsMap[venue];
@@ -667,7 +676,7 @@
 								{#each day.trucks as truck, ti}
 									{@const fp = truckFP(selectedCluster, day.bumpInDate, ti, truck.items)}
 									{@const disp = dispatchMap[fp]}
-									<div class="truck-card" style={disp?.dispatched ? 'border-color:var(--gn)' : truck.isCORT ? 'border-color:var(--or)' : ''}>
+									<div class="truck-card" style="cursor:pointer;{disp?.dispatched ? 'border-color:var(--gn)' : truck.isCORT ? 'border-color:var(--or)' : ''}" onclick={() => openTruckDetail(day, truck)}>
 										<div style="display:flex;justify-content:space-between;margin-bottom:4px">
 											<span style="font-size:13px;font-weight:700;{truck.isCORT ? 'color:var(--rd)' : ''}">{truck.isCORT ? 'CORT' : 'CL-' + (ti + 1)}</span>
 											<span class="mono" style="font-size:12px;font-weight:700">{truck.pallets.toFixed(1)} / 26</span>
@@ -726,7 +735,7 @@
 									{#each day.trucks as truck, ti}
 										{@const fp = truckFP(selectedVenue, day.bumpInDate, ti, truck.items)}
 										{@const disp = dispatchMap[fp]}
-										<div class="truck-card" style={disp?.dispatched ? 'border-color:var(--gn)' : truck.isCORT ? 'border-color:var(--or)' : ''}>
+										<div class="truck-card" style="cursor:pointer;{disp?.dispatched ? 'border-color:var(--gn)' : truck.isCORT ? 'border-color:var(--or)' : ''}" onclick={() => openTruckDetail(day, truck)}>
 											<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
 												<span style="font-size:13px;font-weight:700;{truck.isCORT ? 'color:var(--rd)' : ''}">{truck.isCORT ? 'CORT' : 'T-' + (ti + 1)}</span>
 												<span style="font-size:13px;font-weight:700;font-family:var(--fm)">{truck.pallets.toFixed(1)} <span style="font-size:10px;font-weight:400;color:var(--ts)">/ {vs?.truck_capacity || 26}</span></span>
@@ -934,6 +943,34 @@
 				<div style="display:flex;justify-content:flex-end;margin-top:12px">
 					<button class="mbtn" onclick={() => showPalletCfgModal = false}>Close</button>
 				</div>
+			</div>
+		</Modal>
+	{/if}
+
+	<!-- Truck Detail Modal -->
+	{#if showTruckModal && modalTruck}
+		<Modal title="{modalTruck.isCORT ? 'CORT' : 'Truck'} — {modalDay?.dispatchDate} → {modalDay?.bumpInDate}" bind:open={showTruckModal}>
+			<div style="font-size:12px">
+				<div style="display:flex;gap:12px;margin-bottom:12px">
+					<div><span style="color:var(--ts)">Pallets:</span> <b>{modalTruck.pallets.toFixed(1)}</b></div>
+					<div><span style="color:var(--ts)">Pieces:</span> <b>{modalTruck.pieces.toLocaleString()}</b></div>
+					<div><span style="color:var(--ts)">SKUs:</span> <b>{modalTruck.items.length}</b></div>
+				</div>
+				<table class="dtb">
+					<thead><tr><th>SKU</th><th>Name</th><th>Qty</th><th>Pallets</th></tr></thead>
+					<tbody>
+						{#each modalTruck.items as item}
+							{@const nom = nomMap[item.sku]}
+							{@const sq = stockQtys[item.sku]}
+							<tr>
+								<td class="mono" style="font-size:10px">{item.sku}</td>
+								<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{nom?.name || item.name || item.sku}</td>
+								<td class="mono fw7">{item.qty.toLocaleString()}</td>
+								<td class="mono">{item.pallets.toFixed(2)}</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
 			</div>
 		</Modal>
 	{/if}

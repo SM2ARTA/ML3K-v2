@@ -6,7 +6,9 @@
 	import { goto } from '$app/navigation';
 	import { HelpDialog, Toast } from '$lib/components';
 	import { exportBackup, importBackup } from '$lib/backup';
+	import { uploadStockReport } from '$lib/db';
 	import { restoreUndo, hasUndo } from '$lib/undo';
+	import * as XLSX from 'xlsx';
 	import { startRealtime, stopRealtime } from '$lib/realtime';
 	import { loadAIConfig } from '$lib/hs-utils';
 	import { signOut } from '$lib/auth';
@@ -18,6 +20,7 @@
 	let resetOpen = $state(false);
 	let resetBusy = $state(false);
 	let backupStatus = $state('');
+	let stockStatus = $state('');
 	let undoAvailable = $state(false);
 	let realtimeActive = $state(false);
 	let lastSync = $state('');
@@ -47,6 +50,33 @@
 			backupStatus = log.join(' | ');
 			setTimeout(() => { backupStatus = ''; window.location.reload(); }, 3000);
 		} catch (e: any) { backupStatus = 'Error: ' + e.message; }
+		input.value = '';
+	}
+
+	async function doStockUpload(e: Event) {
+		const input = e.target as HTMLInputElement;
+		const f = input.files?.[0];
+		if (!f) return;
+		stockStatus = 'Reading...';
+		try {
+			const buf = await f.arrayBuffer();
+			const wb = XLSX.read(buf, { type: 'array' });
+			const ws = wb.Sheets[wb.SheetNames[0]];
+			const rows: Record<string, any>[] = XLSX.utils.sheet_to_json(ws);
+			if (rows.length === 0) { stockStatus = 'No rows found'; return; }
+			// Find SKU column
+			const hdr = Object.keys(rows[0]);
+			const skuCol = hdr.find(h => /^(sku|code|nomenclature.?code)$/i.test(h.trim()));
+			const qtyCol = hdr.find(h => /^(qty|quantity|on.?hand|available)$/i.test(h.trim()));
+			if (!skuCol || !qtyCol) { stockStatus = `Columns not found. Headers: ${hdr.join(', ')}`; return; }
+			const items = rows
+				.filter(r => r[skuCol] && Number(r[qtyCol]) > 0)
+				.map(r => ({ sku: String(r[skuCol]).trim(), qty: Number(r[qtyCol]) || 0, report_name: f.name }));
+			stockStatus = `Uploading ${items.length} SKUs...`;
+			const count = await uploadStockReport(items);
+			stockStatus = `Stock uploaded: ${count} SKUs from ${f.name}`;
+			setTimeout(() => { stockStatus = ''; }, 4000);
+		} catch (err: any) { stockStatus = 'Error: ' + err.message; }
 		input.value = '';
 	}
 
@@ -131,6 +161,10 @@
 						📂 Restore
 						<input type="file" accept=".xlsx" onchange={doRestore} style="position:absolute;width:1px;height:1px;opacity:0">
 					</label>
+					<label class="rbtn" style="font-size:10px;padding:4px 8px;background:var(--gs);color:var(--gn);border-color:#B8DFCA;cursor:pointer">
+						📊 Stock
+						<input type="file" accept=".xlsx,.xls" onchange={doStockUpload} style="position:absolute;width:1px;height:1px;opacity:0">
+					</label>
 				{/if}
 				<button class="rbtn" onclick={doUndo} disabled={!undoAvailable}
 					style="font-size:10px;padding:4px 8px;opacity:{undoAvailable ? 1 : 0.3}" title="Undo last action">↩ Undo</button>
@@ -173,6 +207,9 @@
 		</Modal>
 		{#if backupStatus}
 			<div style="padding:4px 16px;background:var(--os);font-size:10px;color:var(--or);text-align:center">{backupStatus}</div>
+		{/if}
+		{#if stockStatus}
+			<div style="padding:4px 16px;background:var(--gs);font-size:10px;color:var(--gn);text-align:center">{stockStatus}</div>
 		{/if}
 		<main class="app-body">
 			{@render children()}
