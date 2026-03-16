@@ -116,6 +116,46 @@ export async function updateDestination(abbr: string, fields: Record<string, any
 	return !error;
 }
 
+// Container date overrides
+export async function upsertContainerOverride(container: string, date: string) {
+	const { error } = await supabase.from('lp_container_overrides').upsert({ container, override_date: date }, { onConflict: 'container' });
+	return !error;
+}
+
+export async function removeContainerOverride(container: string) {
+	await supabase.from('lp_container_overrides').delete().eq('container', container);
+}
+
+export async function getContainerOverrides() {
+	const { data } = await supabase.from('lp_container_overrides').select('*');
+	return data || [];
+}
+
+// Pallet overrides
+export async function upsertPalletOverride(sku: string, palletQty: number, palletSpc: number) {
+	const { error } = await supabase.from('lp_pallet_overrides').upsert({ sku, pallet_qty: palletQty, pallet_spc: palletSpc }, { onConflict: 'sku' });
+	return !error;
+}
+
+export async function removePalletOverride(sku: string) {
+	await supabase.from('lp_pallet_overrides').delete().eq('sku', sku);
+}
+
+export async function getPalletOverrides() {
+	const { data } = await supabase.from('lp_pallet_overrides').select('*');
+	return data || [];
+}
+
+// Manual arrivals
+export async function addManualArrival(item: { sku: string; name: string; container: string; qty: number; arrival_date: string; ready_date: string; avail_pallets: number }) {
+	const { error } = await supabase.from('lp_arrivals').insert({ ...item, is_manual: true });
+	return !error;
+}
+
+export async function deleteArrival(id: number) {
+	await supabase.from('lp_arrivals').delete().eq('id', id);
+}
+
 export async function updateTruckDispatch(truckId: number, fields: Record<string, any>) {
 	const { error } = await supabase
 		.from('lp_truck_dispatch')

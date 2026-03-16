@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { getLPDemand, getLPHolds, getLPTruckSummary, getLPPlan, getLPDestinations, getLPTruckDispatch, getLPArrivals, getStockReport, getLPSettings, getLPNomenclature, getLPCustomsOverrides, updateCustomsOverride, toggleHSConfirm, updateTruckDispatch, saveLSR, holdBySource, getLPDemandForHolds, updateLPSettings, updateDestination } from '$lib/db';
 	import { role } from '$lib/stores';
-	import { TabBar, StatBadge, Spinner, SearchInput, FilterDropdown, DestBadge, EditableCell, ConfirmButton, TruckCard, HoldBar, BottomBar, TruckModal, HSLookup } from '$lib/components';
+	import { TabBar, StatBadge, Spinner, SearchInput, FilterDropdown, DestBadge, EditableCell, ConfirmButton, TruckCard, HoldBar, BottomBar, TruckModal, HSLookup, CombinedCIModal } from '$lib/components';
 	import { fmtDate } from '$lib/utils';
 	import { exportLPPlan, exportLPDemand, exportLPArrivals } from '$lib/exports';
 	import { createSvelteTable, type ColumnDef, type SortingState } from '$lib/table.svelte';
@@ -32,6 +32,7 @@
 	let hsLookupOpen = $state(false);
 	let hsLookupSku = $state('');
 	let hsLookupName = $state('');
+	let combinedCIOpen = $state(false);
 	let activeTab = $state('demand');
 	let globalFilter = $state('');
 	let sorting = $state<SortingState>([]);
@@ -239,9 +240,17 @@
 	</div>
 
 	<!-- Hold Bar -->
-	<HoldBar sources={allSources} destinations={allDests} {holds} {isAdmin}
-		onHold={(src, dest) => handleHold(src, dest, false)}
-		onRelease={(src, dest) => handleHold(src, dest, true)} />
+	<div style="display:flex;gap:8px;align-items:stretch;margin-bottom:8px">
+		<div style="flex:1">
+			<HoldBar sources={allSources} destinations={allDests} {holds} {isAdmin}
+				onHold={(src, dest) => handleHold(src, dest, false)}
+				onRelease={(src, dest) => handleHold(src, dest, true)} />
+		</div>
+		<button class="rbtn" onclick={() => combinedCIOpen = true}
+			style="font-size:10px;padding:8px 12px;background:var(--ps);color:var(--pu);border-color:#D4C5FE;font-weight:600;white-space:nowrap;align-self:start">
+			📄 Combined CI
+		</button>
+	</div>
 
 	<!-- Table -->
 	<div style="overflow-x:auto;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);max-height:calc(100vh - 260px);overflow-y:auto">
@@ -414,12 +423,53 @@
 		</table>
 	</div>
 
-{:else}
-	<div class="card" style="text-align:center;padding:40px">
-		<div style="font-size:14px;font-weight:700;margin-bottom:8px">⚠ Late Analysis</div>
-		<div style="font-size:12px;color:var(--ts)">Coming soon — requires LM dispatch dates for comparison</div>
+{:else if activeTab === 'late'}
+	<!-- Late Tab — basic arrival analysis -->
+	{@const lateItems = arrivals.filter(a => {
+		if (!a.ready_date) return false;
+		const today = new Date().toISOString().slice(0, 10);
+		return a.ready_date > today;
+	}).sort((a, b) => (a.ready_date || '').localeCompare(b.ready_date || ''))}
+	<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+		<StatBadge label="{lateItems.length} items not yet ready" variant={lateItems.length > 0 ? 'orange' : 'green'} />
+		<StatBadge label="{arrivals.filter(a => a.ready_date && a.ready_date <= new Date().toISOString().slice(0, 10)).length} ready now" variant="green" />
 	</div>
+
+	{#if lateItems.length === 0}
+		<div class="card" style="text-align:center;padding:40px">
+			<div style="font-size:32px;margin-bottom:12px">✅</div>
+			<div style="font-size:14px;font-weight:700;margin-bottom:6px">All Items Ready</div>
+			<div style="font-size:12px;color:var(--ts)">All arrival items have passed their ready date.</div>
+		</div>
+	{:else}
+		<div style="overflow-x:auto;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);max-height:calc(100vh - 220px);overflow-y:auto">
+			<table class="dtb">
+				<thead style="position:sticky;top:0;background:var(--sf);z-index:10">
+					<tr><th>SKU</th><th>Name</th><th>Container</th><th>Qty</th><th>Arrival</th><th>Ready</th><th>Days Until Ready</th></tr>
+				</thead>
+				<tbody>
+					{#each lateItems as a}
+						{@const daysLeft = Math.ceil((new Date(a.ready_date).getTime() - Date.now()) / 86400000)}
+						<tr>
+							<td class="mono" style="font-weight:600">{a.sku}</td>
+							<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{a.name || '—'}</td>
+							<td class="mono" style="font-size:10px">{a.container || '—'}</td>
+							<td class="mono fw7">{(a.qty || 0).toLocaleString()}</td>
+							<td class="mono">{a.arrival_date || '—'}</td>
+							<td class="mono">{a.ready_date || '—'}</td>
+							<td class="mono" style="color:{daysLeft > 14 ? 'var(--rd)' : daysLeft > 7 ? 'var(--or)' : 'var(--gn)'};font-weight:700">
+								{daysLeft}d
+							</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		</div>
+	{/if}
 {/if}
+
+<!-- Combined CI Modal -->
+<CombinedCIModal bind:open={combinedCIOpen} demandData={data} nomenclature={nomMap} customsOverrides={custOvrMap} />
 
 <!-- HS Code Lookup Modal -->
 <HSLookup bind:open={hsLookupOpen} sku={hsLookupSku} name={hsLookupName}
