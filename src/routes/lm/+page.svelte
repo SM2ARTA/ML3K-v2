@@ -2,7 +2,8 @@
 	import { onMount } from 'svelte';
 	import { getLMNomenclature, getLMDemand, getLMVenueSettings } from '$lib/db';
 	import { role } from '$lib/stores';
-	import { TabBar, StatBadge, Spinner, SearchInput, Card, ProgressBar } from '$lib/components';
+	import { TabBar, StatBadge, Spinner, SearchInput, Card, ProgressBar, TruckCard } from '$lib/components';
+	import { buildLMPlan, type LMTruckDay } from '$lib/lm-engine';
 
 	let noms = $state<any[]>([]);
 	let demand = $state<any[]>([]);
@@ -235,41 +236,65 @@
 				</div>
 
 			{:else if activeTab === 'trucks'}
-				<!-- Trucks placeholder — needs LM plan engine -->
-				<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
-					<StatBadge label="Truck plan view" />
-				</div>
-
 				{#if selectedVenue}
 					{@const vs = vsMap[selectedVenue]}
 					{@const vStat = venueStats.find(v => v.venue === selectedVenue)}
-					<Card>
-						<div style="font-size:14px;font-weight:700;margin-bottom:8px">{selectedVenue}</div>
-						<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;font-size:11px;color:var(--ts)">
-							<div>Pallets: <b style="color:var(--pu)">{(vStat?.pallets || 0).toFixed(1)}</b></div>
-							<div>Pieces: <b>{(vStat?.qty || 0).toLocaleString()}</b></div>
-							<div>SKUs: <b>{vStat?.skuCount || 0}</b></div>
-							{#if vs}
-								<div>Capacity: <b>{vs.truck_capacity} plt</b></div>
-								<div>Max trucks/day: <b>{vs.max_trucks}</b></div>
-								<div>Lead time: <b>{vs.lead_time}d</b></div>
-							{/if}
+					{@const venueDemand = filteredDemand.map(d => {
+						const nom = nomMap[d.sku];
+						return { sku: d.sku, name: nom?.name || d.sku, qty: d.required_qty || 0, bumpInDate: d.bump_in_date || '',
+							palletQty: nom?.pallet_qty || 0, palletSpc: nom?.pallet_spc || 0 };
+					})}
+					{@const plan = buildLMPlan(venueDemand, {
+						truckCapacity: vs?.truck_capacity || 26,
+						maxTrucksPerDay: vs?.max_trucks || 2,
+						leadTime: vs?.lead_time || 3
+					})}
+
+					<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+						<StatBadge label="{plan.reduce((s, d) => s + d.trucks.length, 0)} trucks · {plan.length} days" />
+						<StatBadge label="{(vStat?.pallets || 0).toFixed(0)} plt total" variant="purple" />
+						<StatBadge label="{vs?.truck_capacity || 26} plt/truck · {vs?.lead_time || 3}d lead" variant="default" />
+					</div>
+
+					{#if plan.length === 0}
+						<div class="card" style="text-align:center;padding:30px">
+							<div style="font-size:12px;color:var(--ts)">No items with valid bump-in dates and pallet data for this venue.</div>
 						</div>
-						{#if vs}
-							<div style="margin-top:8px">
-								<ProgressBar value={vStat?.pallets || 0} max={vs.truck_capacity * vs.max_trucks} />
+					{:else}
+						{#each plan as day}
+							<div style="margin-bottom:14px">
+								<div style="font-size:11px;font-weight:700;color:var(--ts);margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--bd)">
+									📅 Dispatch: {day.dispatchDate} → Bump-in: {day.bumpInDate}
+									<span style="font-weight:400;color:var(--tt);margin-left:8px">{day.trucks.length} truck{day.trucks.length > 1 ? 's' : ''} · {day.totalPallets.toFixed(1)} plt · {day.totalPieces.toLocaleString()} pcs</span>
+								</div>
+								<div style="display:flex;flex-wrap:wrap;gap:10px">
+									{#each day.trucks as truck, ti}
+										<Card padding="12px">
+											<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+												<span style="font-size:13px;font-weight:700">T-{ti + 1}</span>
+												<span style="font-size:13px;font-weight:700;font-family:var(--fm)">{truck.pallets.toFixed(1)} <span style="font-size:10px;font-weight:400;color:var(--ts)">/ {vs?.truck_capacity || 26}</span></span>
+											</div>
+											<ProgressBar value={truck.pallets} max={vs?.truck_capacity || 26} />
+											<div style="font-size:10px;color:var(--tt);margin-top:4px">{truck.items.length} SKUs · {truck.pieces.toLocaleString()} pcs</div>
+											<div style="margin-top:6px;max-height:150px;overflow-y:auto">
+												{#each truck.items as item}
+													<div style="display:flex;justify-content:space-between;font-size:9px;padding:2px 0;border-bottom:1px solid var(--bg)">
+														<span class="mono" style="font-weight:600">{item.sku}</span>
+														<span>{item.qty.toLocaleString()} pcs · {item.pallets.toFixed(2)} plt</span>
+													</div>
+												{/each}
+											</div>
+										</Card>
+									{/each}
+								</div>
 							</div>
-							<div style="font-size:10px;color:var(--ts);margin-top:4px">
-								~{Math.ceil((vStat?.pallets || 0) / vs.truck_capacity)} trucks needed
-							</div>
-						{/if}
-					</Card>
+						{/each}
+					{/if}
 				{:else}
 					<div class="card" style="text-align:center;padding:40px">
 						<div style="font-size:32px;margin-bottom:12px">🚛</div>
 						<div style="font-size:14px;font-weight:700;margin-bottom:6px">Select a Venue</div>
-						<div style="font-size:12px;color:var(--ts)">Select a venue from the sidebar to see truck plan details.</div>
-						<div style="font-size:10px;color:var(--tt);margin-top:8px">Note: Full truck plan generation requires the v1 engine port (coming soon).</div>
+						<div style="font-size:12px;color:var(--ts)">Select a venue from the sidebar to see the truck loading plan.</div>
 					</div>
 				{/if}
 			{/if}
