@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { getLPDemand, getLPHolds, getLPTruckSummary, getLPPlan, getLPDestinations, getLPTruckDispatch, getLPArrivals, updateCustomsOverride, toggleHSConfirm } from '$lib/db';
+	import { getLPDemand, getLPHolds, getLPTruckSummary, getLPPlan, getLPDestinations, getLPTruckDispatch, getLPArrivals, getStockReport, updateCustomsOverride, toggleHSConfirm, updateTruckDispatch, saveLSR, holdBySource, getLPDemandForHolds } from '$lib/db';
 	import { role } from '$lib/stores';
-	import { TabBar, StatBadge, Spinner, SearchInput, FilterDropdown, DestBadge, EditableCell, ConfirmButton, TruckCard } from '$lib/components';
+	import { TabBar, StatBadge, Spinner, SearchInput, FilterDropdown, DestBadge, EditableCell, ConfirmButton, TruckCard, HoldBar } from '$lib/components';
+	import { fmtDate } from '$lib/utils';
 	import { createSvelteTable, type ColumnDef, type SortingState } from '$lib/table.svelte';
 	import { getCoreRowModel, getSortedRowModel, getFilteredRowModel } from '@tanstack/table-core';
 
@@ -10,7 +11,7 @@
 		sku: string; name: string; source: string; totalQty: number;
 		hs_code: string; country: string; unit_price: number; customs_name: string;
 		hs_confirmed: boolean; pallet_qty: number; pallet_spc: number;
-		totalPallets: number; dests: Record<string, number>;
+		totalPallets: number; dests: Record<string, number>; stockQty: number | null;
 	};
 
 	let rawDemand = $state<any[]>([]);
@@ -19,6 +20,8 @@
 	let truckDispatch = $state<any[]>([]);
 	let destinations = $state<any[]>([]);
 	let arrivals = $state<any[]>([]);
+	let stockMap = $state<Map<string, number>>(new Map());
+	let rawDemandForHolds = $state<any[]>([]);
 	let loading = $state(true);
 	let activeTab = $state('demand');
 	let globalFilter = $state('');
@@ -88,7 +91,8 @@
 				hs_confirmed: d.hs_confirmed || false,
 				pallet_qty: d.pallet_qty || 0, pallet_spc: d.pallet_spc || 0,
 				totalPallets: d.pallet_qty > 0 ? (d.total_qty / d.pallet_qty) * (d.pallet_spc || 0) : 0,
-				dests: d.destinations || {}
+				dests: d.destinations || {},
+				stockQty: stockMap.has(d.sku) ? (stockMap.get(d.sku) ?? null) : null
 			}));
 		}
 		const map = new Map<string, DemandRow>();
@@ -118,6 +122,7 @@
 		{ accessorKey: 'name', header: 'Name', size: 200 },
 		{ accessorKey: 'source', header: 'Source', size: 80 },
 		{ accessorKey: 'totalQty', header: 'Total Qty', size: 80 },
+		{ accessorKey: 'stockQty', header: 'Stock', size: 60 },
 		{ accessorKey: 'unit_price', header: 'Price', size: 70 },
 		{ accessorKey: 'hs_code', header: 'HS Code', size: 90 },
 		{ accessorKey: 'country', header: 'COO', size: 60 },
@@ -139,12 +144,44 @@
 
 	onMount(async () => {
 		loading = true;
-		const [d, h, p, td, dest, arr] = await Promise.all([
-			getLPDemand(), getLPHolds(), getLPPlan(), getLPTruckDispatch(), getLPDestinations(), getLPArrivals()
+		const [d, h, p, td, dest, arr, stock] = await Promise.all([
+			getLPDemand(), getLPHolds(), getLPPlan(), getLPTruckDispatch(), getLPDestinations(), getLPArrivals(), getStockReport()
 		]);
 		rawDemand = d; holds = h; planRows = p; truckDispatch = td; destinations = dest; arrivals = arr;
+		stockMap = new Map(stock.map((s: any) => [s.sku, s.qty]));
 		loading = false;
 	});
+
+	async function reloadHolds() {
+		holds = await getLPHolds();
+	}
+
+	async function handleHold(src: string, dest: string | null, release: boolean) {
+		if (!isAdmin) return;
+		if (!rawDemandForHolds.length) rawDemandForHolds = await getLPDemandForHolds();
+		await holdBySource(rawDemandForHolds, src, dest, release);
+		await reloadHolds();
+	}
+
+	async function handleDispatch(truckId: number, dispatched: boolean) {
+		if (!isAdmin) return;
+		await updateTruckDispatch(truckId, { dispatched });
+		truckDispatch = await getLPTruckDispatch();
+	}
+
+	async function handleDateChange(truckId: number, date: string) {
+		if (!isAdmin) return;
+		await updateTruckDispatch(truckId, { dispatched: true });
+		// Update plan rows for this truck
+		// Note: in v2 we'd update the plan table directly; for now just refresh
+		truckDispatch = await getLPTruckDispatch();
+	}
+
+	async function handleLsrSave(truckId: number, lsr: string) {
+		if (!isAdmin) return;
+		await saveLSR(truckId, lsr);
+		truckDispatch = await getLPTruckDispatch();
+	}
 
 	const isAdmin = $derived($role === 'admin');
 
@@ -189,8 +226,13 @@
 		<FilterDropdown label="Destinations" items={allDests} bind:selected={selectedDests} allLabel="All" />
 	</div>
 
+	<!-- Hold Bar -->
+	<HoldBar sources={allSources} destinations={allDests} {holds} {isAdmin}
+		onHold={(src, dest) => handleHold(src, dest, false)}
+		onRelease={(src, dest) => handleHold(src, dest, true)} />
+
 	<!-- Table -->
-	<div style="overflow-x:auto;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);max-height:calc(100vh - 220px);overflow-y:auto">
+	<div style="overflow-x:auto;background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);max-height:calc(100vh - 260px);overflow-y:auto">
 		<table class="dtb" style="min-width:1200px">
 			<thead style="position:sticky;top:0;z-index:10;background:var(--sf)">
 				{#each tableInstance.table.getHeaderGroups() as headerGroup}
@@ -214,6 +256,9 @@
 						<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title={r.name}>{r.name || '—'}</td>
 						<td style="font-size:10px;color:var(--ts)">{r.source || '—'}</td>
 						<td class="mono fw7">{r.totalQty.toLocaleString()}</td>
+						<td class="mono" style="color:{r.stockQty !== null ? (r.stockQty > 0 ? 'var(--gn)' : 'var(--rd)') : 'var(--tt)'}">
+							{r.stockQty !== null ? r.stockQty.toLocaleString() : '—'}
+						</td>
 						<td><EditableCell value={r.unit_price || ''} type="number" placeholder="0.00" width="55px" {isAdmin} onsave={(v) => onCustomsChange(r.sku, 'price', v)} /></td>
 						<td style={r.hs_confirmed ? 'background:var(--gs)' : ''}>
 							<EditableCell value={r.hs_code || ''} placeholder="0000.00" width="65px" {isAdmin} confirmed={r.hs_confirmed} onsave={(v) => onCustomsChange(r.sku, 'hs_code', v)} />
@@ -265,6 +310,9 @@
 							lsrNumber={t.lsrNumber}
 							transitDays={t.transitDays}
 							{isAdmin}
+							onToggleDispatch={handleDispatch}
+							onDateChange={handleDateChange}
+							onLsrSave={handleLsrSave}
 						/>
 					{/each}
 				</div>

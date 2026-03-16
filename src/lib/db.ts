@@ -116,6 +116,55 @@ export async function updateDestination(abbr: string, fields: Record<string, any
 	return !error;
 }
 
+export async function updateTruckDispatch(truckId: number, fields: Record<string, any>) {
+	const { error } = await supabase
+		.from('lp_truck_dispatch')
+		.upsert({ truck_id: truckId, ...fields }, { onConflict: 'truck_id' });
+	return !error;
+}
+
+export async function saveLSR(truckId: number, lsr: string) {
+	return updateTruckDispatch(truckId, { lsr_number: lsr || null });
+}
+
+/** Hold all SKUs from a source (optionally for a specific destination) */
+export async function holdBySource(demandRows: any[], source: string, destination: string | null, release: boolean) {
+	const pairs = demandRows
+		.filter(d => d.source === source && (!destination || d.destination === destination))
+		.map(d => ({ destination: d.destination, sku: d.sku }));
+
+	if (release) {
+		for (const p of pairs) {
+			await supabase.from('lp_holds').delete().match({ destination: p.destination, sku: p.sku, hold_type: 'manual' });
+		}
+	} else {
+		for (const p of pairs) {
+			await supabase.from('lp_holds').upsert(
+				{ destination: p.destination, sku: p.sku, hold_type: 'manual' },
+				{ onConflict: 'destination,sku,hold_type' }
+			);
+		}
+	}
+	return true;
+}
+
+/** Get raw demand rows (for hold-by-source, need destination+sku+source) */
+export async function getLPDemandForHolds() {
+	const all: any[] = [];
+	let from = 0;
+	while (true) {
+		const { data } = await supabase.from('lp_demand').select('sku, destination').range(from, from + 999);
+		if (!data || data.length === 0) break;
+		all.push(...data);
+		if (data.length < 1000) break;
+		from += 1000;
+	}
+	// Join with nomenclature for source
+	const { data: noms } = await supabase.from('lp_nomenclature').select('sku, source');
+	const srcMap = new Map((noms || []).map(n => [n.sku, n.source]));
+	return all.map(d => ({ ...d, source: srcMap.get(d.sku) || '' }));
+}
+
 // ── LM Data ──
 
 export async function getLMNomenclature() {
