@@ -15,9 +15,12 @@
 import { addDays, isNonWorkday } from './lp-helpers';
 
 export interface LMPlanConfig {
-	truckCapacity: number;    // pallets per truck (default 26)
-	maxTrucksPerDay: number;  // max trucks dispatched per day (default 2)
-	leadTime: number;         // days before bump-in to dispatch (default 3)
+	truckCapacity: number;       // pallets per truck (default 26)
+	maxTrucksPerDay: number;     // max trucks dispatched per day (default 2)
+	leadTime: number;            // days before bump-in to dispatch (default 3)
+	palletMode?: 'dis' | 'asm'; // disassembled (default) or assembled pallet dimensions
+	clusterTurnaround?: number;  // extra days for USA cluster trucks (default 0)
+	isCluster?: boolean;         // is this a cluster-level build?
 }
 
 export interface LMTruckDay {
@@ -66,19 +69,27 @@ function isSTP(source: string): boolean {
 	return /\bSTP\b/i.test(source || '');
 }
 
-/** Build LM plan for a venue */
+/** Build LM plan for a venue or cluster */
 export function buildLMPlan(
-	demand: { sku: string; name: string; qty: number; bumpInDate: string; palletQty: number; palletSpc: number; source?: string }[],
+	demand: { sku: string; name: string; qty: number; bumpInDate: string; palletQty: number; palletSpc: number; palletQtyAsm?: number; palletSpcAsm?: number; source?: string }[],
 	config: LMPlanConfig
 ): LMTruckDay[] {
-	const { truckCapacity, maxTrucksPerDay, leadTime } = config;
+	const { truckCapacity, maxTrucksPerDay, palletMode = 'dis' } = config;
+	const leadTime = config.leadTime + (config.clusterTurnaround || 0);
 
 	// Separate CORT items and filter STP
 	const cortItems = demand.filter(d => isCORT(d.sku) && d.qty > 0 && d.bumpInDate);
 	const regularItems = demand.filter(d => !isCORT(d.sku) && !isSTP(d.source || ''));
 
+	// Resolve pallet dimensions based on mode (assembled vs disassembled)
+	const resolvedItems = regularItems.map(d => {
+		const pq = palletMode === 'asm' && d.palletQtyAsm ? d.palletQtyAsm : d.palletQty;
+		const ps = palletMode === 'asm' && d.palletSpcAsm ? d.palletSpcAsm : d.palletSpc;
+		return { ...d, palletQty: pq, palletSpc: ps };
+	});
+
 	// Filter items with valid pallet data and qty
-	const validItems = regularItems.filter(d => d.palletQty > 0 && d.palletSpc > 0 && d.qty > 0);
+	const validItems = resolvedItems.filter(d => d.palletQty > 0 && d.palletSpc > 0 && d.qty > 0);
 	if (!validItems.length) return [];
 
 	// Group by bump-in date
@@ -202,4 +213,36 @@ export function buildLMPlan(
 	}
 
 	return days;
+}
+
+/** Build consolidated cluster plan — combines demand from multiple venues */
+export function buildClusterPlan(
+	allDemand: { sku: string; name: string; qty: number; bumpInDate: string; palletQty: number; palletSpc: number; palletQtyAsm?: number; palletSpcAsm?: number; source?: string; venue?: string }[],
+	venues: string[],
+	config: LMPlanConfig
+): LMTruckDay[] {
+	// Filter demand to only the venues in this cluster
+	const clusterDemand = allDemand.filter(d => venues.includes(d.venue || ''));
+	return buildLMPlan(clusterDemand, { ...config, isCluster: true });
+}
+
+/** Calculate venue summary from demand */
+export function calcVenueSummary(
+	demand: { sku: string; qty: number; palletQty: number; palletSpc: number; palletQtyAsm?: number; palletSpcAsm?: number; bumpInDate?: string }[],
+	palletMode: 'dis' | 'asm' = 'dis'
+): { totalQty: number; totalPallets: number; skuCount: number; earliestBI: string } {
+	let totalQty = 0, totalPallets = 0;
+	const skus = new Set<string>();
+	const dates: string[] = [];
+
+	for (const d of demand) {
+		totalQty += d.qty || 0;
+		skus.add(d.sku);
+		if (d.bumpInDate) dates.push(d.bumpInDate);
+		const pq = palletMode === 'asm' && d.palletQtyAsm ? d.palletQtyAsm : d.palletQty;
+		const ps = palletMode === 'asm' && d.palletSpcAsm ? d.palletSpcAsm : d.palletSpc;
+		if (pq > 0 && ps > 0) totalPallets += ((d.qty || 0) / pq) * ps;
+	}
+
+	return { totalQty, totalPallets, skuCount: skus.size, earliestBI: dates.sort()[0] || '' };
 }

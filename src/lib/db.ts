@@ -222,6 +222,33 @@ export async function getLMVenueSettings() {
 	return data || [];
 }
 
+export async function updateLMVenueSettings(venue: string, fields: Record<string, any>) {
+	const { error } = await supabase.from('lm_venue_settings').upsert({ venue, ...fields }, { onConflict: 'venue' });
+	return !error;
+}
+
+export async function getLMPalletConfig() {
+	const { data } = await supabase.from('lm_pallet_config').select('*');
+	return data || [];
+}
+
+export async function getLMDispatch() {
+	const { data } = await supabase.from('lm_dispatch').select('*');
+	return data || [];
+}
+
+export async function updateLMDispatch(fingerprint: string, dispatched: boolean, dateOverride?: string) {
+	const fields: Record<string, any> = { fingerprint, dispatched };
+	if (dateOverride) fields.date_override = dateOverride;
+	const { error } = await supabase.from('lm_dispatch').upsert(fields, { onConflict: 'fingerprint' });
+	return !error;
+}
+
+export async function getAppSettings() {
+	const { data } = await supabase.from('app_settings').select('*');
+	return data || [];
+}
+
 // ── Stock ──
 
 export async function getStockReport() {

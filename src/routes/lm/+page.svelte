@@ -243,7 +243,52 @@
 				</div>
 
 			{:else if activeTab === 'trucks'}
-				{#if selectedVenue}
+				{#if selectedCluster && !selectedVenue}
+					<!-- Cluster truck plan -->
+					{@const clVenues = clusters.find(c => c.name === selectedCluster)?.venues || []}
+					{@const clDemand = demand.filter(d => clVenues.some(v => v.venue === d.venue)).map(d => {
+						const nom = nomMap[d.sku];
+						return { sku: d.sku, name: nom?.name || d.sku, qty: d.required_qty || 0, bumpInDate: d.bump_in_date || '',
+							palletQty: nom?.pallet_qty || 0, palletSpc: nom?.pallet_spc || 0,
+							palletQtyAsm: nom?.pallet_qty_asm || 0, palletSpcAsm: nom?.pallet_spc_asm || 0,
+							source: nom?.source || '', venue: d.venue };
+					})}
+					{@const clPlan = buildLMPlan(clDemand, { truckCapacity: 26, maxTrucksPerDay: 4, leadTime: 3, clusterTurnaround: 5, isCluster: true })}
+
+					<div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+						<StatBadge label="Cluster: {selectedCluster}" variant="purple" />
+						<StatBadge label="{clVenues.length} venues · {clPlan.reduce((s, d) => s + d.trucks.length, 0)} trucks" />
+					</div>
+
+					{#each clPlan as day}
+						<div style="margin-bottom:14px">
+							<div style="font-size:11px;font-weight:700;color:var(--ts);margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--bd)">
+								📅 Dispatch: {day.dispatchDate} → BI: {day.bumpInDate} — {day.trucks.length}t · {day.totalPallets.toFixed(1)} plt
+							</div>
+							<div style="display:flex;flex-wrap:wrap;gap:10px">
+								{#each day.trucks as truck, ti}
+									<Card padding="12px">
+										<div style="display:flex;justify-content:space-between;margin-bottom:4px">
+											<span style="font-size:13px;font-weight:700;{truck.isCORT ? 'color:var(--rd)' : ''}">{truck.isCORT ? 'CORT' : 'CL-' + (ti + 1)}</span>
+											<span class="mono" style="font-size:12px;font-weight:700">{truck.pallets.toFixed(1)} / 26</span>
+										</div>
+										<ProgressBar value={truck.pallets} max={26} />
+										<div style="font-size:9px;color:var(--tt);margin-top:3px">{truck.items.length} SKUs · {truck.pieces.toLocaleString()} pcs</div>
+										<div style="margin-top:4px;max-height:120px;overflow-y:auto">
+											{#each truck.items.slice(0, 20) as item}
+												<div style="display:flex;justify-content:space-between;font-size:8px;padding:1px 0;border-bottom:1px solid var(--bg)">
+													<span class="mono">{item.sku}</span>
+													<span>{item.qty} · {item.pallets.toFixed(2)}p</span>
+												</div>
+											{/each}
+										</div>
+									</Card>
+								{/each}
+							</div>
+						</div>
+					{/each}
+
+				{:else if selectedVenue}
 					{@const vs = vsMap[selectedVenue]}
 					{@const vStat = venueStats.find(v => v.venue === selectedVenue)}
 					{@const venueDemand = filteredDemand.map(d => {

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { getSystemStats, getLPTruckSummary, getLPDestinations } from '$lib/db';
-	import { StatBadge, Spinner, Card, ProgressBar, DispatchChart, BottomBar } from '$lib/components';
+	import { StatBadge, Spinner, Card, ProgressBar, DispatchChart, BottomBar, NetworkMap } from '$lib/components';
 	import { exportV26Summary } from '$lib/exports';
 	import { destColor } from '$lib/utils';
 
@@ -84,6 +84,14 @@
 			<Card>
 				<div style="font-size:14px;font-weight:700;margin-bottom:8px">📊 Dispatch Volume</div>
 				<DispatchChart data={timeline} />
+			</Card>
+		{/if}
+
+		<!-- Network Map -->
+		{#if destSummary.length > 0}
+			<Card>
+				<div style="font-size:14px;font-weight:700;margin-bottom:8px">🌐 Network</div>
+				<NetworkMap destinations={destSummary} />
 			</Card>
 		{/if}
 
